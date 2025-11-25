@@ -9,7 +9,6 @@ import {
   AgentEventsEnum,
 } from "@heygen/liveavatar-web-sdk";
 import { LiveAvatarSessionMessage } from "./types";
-import { API_URL } from "../../app/api/secrets";
 
 type LiveAvatarContextProps = {
   sessionRef: React.RefObject<LiveAvatarSession>;
@@ -179,9 +178,10 @@ export const LiveAvatarContextProvider = ({
   sessionAccessToken,
 }: LiveAvatarContextProviderProps) => {
   // Default voice chat on
+  // Note: apiUrl defaults to https://api.liveavatar.com in the SDK
+  // Only override if you need a different API endpoint
   const config = {
     voiceChat: true,
-    apiUrl: API_URL,
   };
   const sessionRef = useRef<LiveAvatarSession>(
     new LiveAvatarSession(sessionAccessToken, config),
