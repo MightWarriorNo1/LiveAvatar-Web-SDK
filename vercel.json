@@ -1,7 +1,6 @@
 {
   "buildCommand": "cd ../.. && pnpm build",
-  "devCommand": "cd ../.. && pnpm run demo",
-  "installCommand": "CI=true pnpm install",
+  "installCommand": "pnpm install",
   "framework": "nextjs"
 }
 
