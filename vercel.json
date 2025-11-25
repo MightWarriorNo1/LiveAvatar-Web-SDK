@@ -1,0 +1,8 @@
+{
+  "buildCommand": "pnpm build",
+  "devCommand": "pnpm run demo",
+  "installCommand": "pnpm install",
+  "framework": "nextjs",
+  "rootDirectory": "apps/demo"
+}
+
