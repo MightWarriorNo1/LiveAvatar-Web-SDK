@@ -6,9 +6,9 @@ import {
   useSession,
   useTextChat,
   useVoiceChat,
+  useAvatarActions,
 } from "../liveavatar";
 import { SessionState } from "@heygen/liveavatar-web-sdk";
-import { useAvatarActions } from "../liveavatar/useAvatarActions";
 
 const Button: React.FC<{
   onClick: () => void;
