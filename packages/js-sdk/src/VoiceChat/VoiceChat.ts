@@ -51,31 +51,40 @@ export class VoiceChat extends (EventEmitter as new () => TypedEmitter<VoiceChat
 
     const { defaultMuted, deviceId } = config;
 
-    this.track = await createLocalAudioTrack({
-      echoCancellation: true,
-      noiseSuppression: true,
-      autoGainControl: true,
-      deviceId,
-    });
+    try {
+      this.track = await createLocalAudioTrack({
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+        deviceId,
+      });
 
-    if (defaultMuted) {
-      await this.track.mute();
-      this.emit(VoiceChatEvent.MUTED);
-    } else {
-      this.emit(VoiceChatEvent.UNMUTED);
+      if (defaultMuted) {
+        await this.track.mute();
+        this.emit(VoiceChatEvent.MUTED);
+      } else {
+        this.emit(VoiceChatEvent.UNMUTED);
+      }
+
+      await this.room.localParticipant.publishTrack(this.track);
+
+      this.track.on(TrackEvent.Muted, () => {
+        this.emit(VoiceChatEvent.MUTED);
+      });
+
+      this.track.on(TrackEvent.Unmuted, () => {
+        this.emit(VoiceChatEvent.UNMUTED);
+      });
+
+      this.state = VoiceChatState.ACTIVE;
+    } catch (error) {
+      // If microphone is not available, emit warning but don't fail
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const warningMessage = `Microphone not available: ${errorMessage}. Session will continue without voice chat.`;
+      console.warn(warningMessage);
+      this.emit(VoiceChatEvent.WARNING, warningMessage);
+      this.state = VoiceChatState.INACTIVE;
     }
-
-    await this.room.localParticipant.publishTrack(this.track);
-
-    this.track.on(TrackEvent.Muted, () => {
-      this.emit(VoiceChatEvent.MUTED);
-    });
-
-    this.track.on(TrackEvent.Unmuted, () => {
-      this.emit(VoiceChatEvent.UNMUTED);
-    });
-
-    this.state = VoiceChatState.ACTIVE;
   }
 
   public stop(): void {

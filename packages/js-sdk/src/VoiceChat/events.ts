@@ -5,6 +5,7 @@ export enum VoiceChatEvent {
   UNMUTED = "UNMUTED",
   // DEVICE_CHANGED = "DEVICE_CHANGED",
   STATE_CHANGED = "STATE_CHANGED",
+  WARNING = "WARNING",
 }
 
 export type VoiceChatEventCallbacks = {
@@ -12,4 +13,5 @@ export type VoiceChatEventCallbacks = {
   [VoiceChatEvent.UNMUTED]: () => void;
   // [VoiceChatEvent.DEVICE_CHANGED]: (deviceId: string) => void;
   [VoiceChatEvent.STATE_CHANGED]: (state: VoiceChatState) => void;
+  [VoiceChatEvent.WARNING]: (message: string) => void;
 };
