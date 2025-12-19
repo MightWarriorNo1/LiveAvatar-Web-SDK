@@ -6,6 +6,7 @@ import {
   useSession,
   useTextChat,
   useVoiceChat,
+  useLiveAvatarContext,
 } from "../liveavatar";
 import { SessionState } from "@heygen/liveavatar-web-sdk";
 import { useAvatarActions } from "../liveavatar/useAvatarActions";
@@ -40,6 +41,7 @@ const LiveAvatarSessionComponent: React.FC<{
     keepAlive,
     attachElement,
   } = useSession();
+  const { microphoneWarning } = useLiveAvatarContext();
   const {
     isAvatarTalking,
     isUserTalking,
@@ -57,9 +59,11 @@ const LiveAvatarSessionComponent: React.FC<{
 
   const { sendMessage } = useTextChat(mode);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const greetingSentRef = useRef<boolean>(false);
 
   useEffect(() => {
     if (sessionState === SessionState.DISCONNECTED) {
+      greetingSentRef.current = false;
       onSessionStopped();
     }
   }, [sessionState, onSessionStopped]);
@@ -71,47 +75,68 @@ const LiveAvatarSessionComponent: React.FC<{
   }, [attachElement, isStreamReady]);
 
   useEffect(() => {
+    if (isStreamReady && sessionState === SessionState.CONNECTED && !greetingSentRef.current) {
+      greetingSentRef.current = true;
+      // Use repeat() instead of sendMessage() so it works in both FULL and CUSTOM modes
+      // In CUSTOM mode, this will speak directly via ElevenLabs without going through OpenAI
+      repeat("Hello I am 6, your personal assistant, how can I help you today");
+    }
+  }, [isStreamReady, sessionState, repeat]);
+
+  useEffect(() => {
     if (sessionState === SessionState.INACTIVE) {
       startSession();
     }
   }, [startSession, sessionState]);
 
-  const VoiceChatComponents = (
-    <>
-      <p>Voice Chat Active: {isActive ? "true" : "false"}</p>
-      <p>Voice Chat Loading: {isLoading ? "true" : "false"}</p>
-      {isActive && <p>Muted: {isMuted ? "true" : "false"}</p>}
-      <Button
-        onClick={() => {
-          if (isActive) {
-            stop();
-          } else {
-            start();
-          }
-        }}
-        disabled={isLoading}
-      >
-        {isActive ? "Stop Voice Chat" : "Start Voice Chat"}
-      </Button>
-      {isActive && (
-        <Button
-          onClick={() => {
-            if (isMuted) {
-              unmute();
-            } else {
-              mute();
-            }
-          }}
-        >
-          {isMuted ? "Unmute" : "Mute"}
-        </Button>
-      )}
-    </>
-  );
+  // const VoiceChatComponents = (
+  //   <>
+  //     <p>Voice Chat Active: {isActive ? "true" : "false"}</p>
+  //     <p>Voice Chat Loading: {isLoading ? "true" : "false"}</p>
+  //     {isActive && <p>Muted: {isMuted ? "true" : "false"}</p>}
+  //     <Button
+  //       onClick={() => {
+  //         if (isActive) {
+  //           stop();
+  //         } else {
+  //           start();
+  //         }
+  //       }}
+  //       disabled={isLoading}
+  //     >
+  //       {isActive ? "Stop Voice Chat" : "Start Voice Chat"}
+  //     </Button>
+  //     {isActive && (
+  //       <Button
+  //         onClick={() => {
+  //           if (isMuted) {
+  //             unmute();
+  //           } else {
+  //             mute();
+  //           }
+  //         }}
+  //       >
+  //         {isMuted ? "Unmute" : "Mute"}
+  //       </Button>
+  //     )}
+  //   </>
+  // );
 
   return (
-    <div className="w-[1080px] max-w-full h-full flex flex-col items-center justify-center gap-4 py-4">
-      <div className="relative w-full aspect-video overflow-hidden flex flex-col items-center justify-center">
+    <div className="fixed inset-0 w-screen h-screen bg-black flex flex-col">
+      {/* Text overlays at the top */}
+      <div className="absolute top-0 left-0 right-0 z-10 flex flex-col items-center pt-4">
+        <h1 className="text-white text-2xl font-semibold">iSolveUrProblems-Beta</h1>
+        <p className="text-white text-xs mt-1">Everything except Murder</p>
+        {microphoneWarning && (
+          <div className="mt-4 bg-yellow-500 text-black px-4 py-2 rounded-md max-w-2xl text-center">
+            <p className="font-semibold">⚠️ Warning: {microphoneWarning}</p>
+          </div>
+        )}
+      </div>
+
+      {/* Full screen video */}
+      <div className="relative w-full h-full flex items-center justify-center">
         <video
           ref={videoRef}
           autoPlay
@@ -119,28 +144,36 @@ const LiveAvatarSessionComponent: React.FC<{
           className="w-full h-full object-contain"
         />
         <button
-          className="absolute bottom-4 right-4 bg-white text-black px-4 py-2 rounded-md"
+          className="absolute bottom-4 right-4 bg-white text-black px-4 py-2 rounded-md z-20"
           onClick={() => stopSession()}
         >
           Stop
         </button>
       </div>
-      <div className="w-full h-full flex flex-col items-center justify-center gap-4">
-        <p>Session state: {sessionState}</p>
-        <p>Connection quality: {connectionQuality}</p>
+
+      {/* Controls overlay - hidden by default, can be shown on hover or kept visible */}
+      {/* <div className="absolute bottom-4 left-4 right-4 z-10 flex flex-col items-center gap-2 bg-black/50 p-4 rounded-md">
+        <div className="flex flex-row items-center gap-2 text-white text-xs">
+          <p>Session: {sessionState}</p>
+          <p>Quality: {connectionQuality}</p>
+          {mode === "FULL" && (
+            <p>User: {isUserTalking ? "talking" : "silent"}</p>
+          )}
+          <p>Avatar: {isAvatarTalking ? "talking" : "silent"}</p>
+        </div>
         {mode === "FULL" && (
-          <p>User talking: {isUserTalking ? "true" : "false"}</p>
+          <div className="flex flex-col items-center gap-2">
+            {VoiceChatComponents}
+          </div>
         )}
-        <p>Avatar talking: {isAvatarTalking ? "true" : "false"}</p>
-        {mode === "FULL" && VoiceChatComponents}
-        <Button
-          onClick={() => {
-            keepAlive();
-          }}
-        >
-          Keep Alive
-        </Button>
-        <div className="w-full h-full flex flex-row items-center justify-center gap-4">
+        <div className="flex flex-row items-center gap-2">
+          <Button
+            onClick={() => {
+              keepAlive();
+            }}
+          >
+            Keep Alive
+          </Button>
           <Button
             onClick={() => {
               startListening();
@@ -163,7 +196,7 @@ const LiveAvatarSessionComponent: React.FC<{
             Interrupt
           </Button>
         </div>
-        <div className="w-full h-full flex flex-row items-center justify-center gap-4">
+        <div className="flex flex-row items-center gap-2">
           <input
             type="text"
             value={message}
@@ -187,7 +220,7 @@ const LiveAvatarSessionComponent: React.FC<{
             Repeat
           </Button>
         </div>
-      </div>
+      </div> */}
     </div>
   );
 };

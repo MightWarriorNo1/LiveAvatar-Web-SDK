@@ -24,6 +24,7 @@ type LiveAvatarContextProps = {
   isAvatarTalking: boolean;
 
   messages: LiveAvatarSessionMessage[];
+  microphoneWarning: string | null;
 };
 
 export const LiveAvatarContext = createContext<LiveAvatarContextProps>({
@@ -38,6 +39,7 @@ export const LiveAvatarContext = createContext<LiveAvatarContextProps>({
   isUserTalking: false,
   isAvatarTalking: false,
   messages: [],
+  microphoneWarning: null,
 });
 
 type LiveAvatarContextProviderProps = {
@@ -82,6 +84,7 @@ const useVoiceChatState = (sessionRef: React.RefObject<LiveAvatarSession>) => {
   const [voiceChatState, setVoiceChatState] = useState<VoiceChatState>(
     sessionRef.current?.voiceChat.state || VoiceChatState.INACTIVE,
   );
+  const [microphoneWarning, setMicrophoneWarning] = useState<string | null>(null);
 
   useEffect(() => {
     if (sessionRef.current) {
@@ -95,10 +98,13 @@ const useVoiceChatState = (sessionRef: React.RefObject<LiveAvatarSession>) => {
         VoiceChatEvent.STATE_CHANGED,
         setVoiceChatState,
       );
+      sessionRef.current.voiceChat.on(VoiceChatEvent.WARNING, (message: string) => {
+        setMicrophoneWarning(message);
+      });
     }
   }, [sessionRef]);
 
-  return { isMuted, voiceChatState };
+  return { isMuted, voiceChatState, microphoneWarning };
 };
 
 const useTalkingState = (sessionRef: React.RefObject<LiveAvatarSession>) => {
@@ -190,7 +196,7 @@ export const LiveAvatarContextProvider = ({
   const { sessionState, isStreamReady, connectionQuality } =
     useSessionState(sessionRef);
 
-  const { isMuted, voiceChatState } = useVoiceChatState(sessionRef);
+  const { isMuted, voiceChatState, microphoneWarning } = useVoiceChatState(sessionRef);
   const { isUserTalking, isAvatarTalking } = useTalkingState(sessionRef);
   // const { messages } = useChatHistoryState(sessionRef);
 
@@ -206,6 +212,7 @@ export const LiveAvatarContextProvider = ({
         isUserTalking,
         isAvatarTalking,
         messages: [], // TODO - properly implement chat history
+        microphoneWarning,
       }}
     >
       {children}

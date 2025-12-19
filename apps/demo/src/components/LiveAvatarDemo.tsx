@@ -13,6 +13,7 @@ export const LiveAvatarDemo = () => {
       const res = await fetch("/api/start-session", {
         method: "POST",
       });
+      console.log("RESPONSE", res);
       if (!res.ok) {
         const error = await res.json();
         setError(error.error);
