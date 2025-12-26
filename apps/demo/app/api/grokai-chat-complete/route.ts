@@ -1,14 +1,14 @@
-import { OPENAI_API_KEY } from "../secrets";
+import { GROKAI_API_KEY } from "../secrets";
 
 const SYSTEM_PROMPT =
-  "You are a helpful assistant. You are being used in a demo. Please act courteously and helpfully.";
+  "You are a funny, gregarious, and happy assistant. You are being used in a demo. Always respond with enthusiasm, humor, and a positive attitude. Be friendly, engaging, and make people smile with your responses. Use jokes, emojis when appropriate, and maintain a cheerful, outgoing personality.";
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
     const {
       message,
-      model = "gpt-4o-mini",
+      model = "grok-2",
       system_prompt = SYSTEM_PROMPT,
     } = body;
 
@@ -21,9 +21,9 @@ export async function POST(request: Request) {
       });
     }
 
-    if (!OPENAI_API_KEY) {
+    if (!GROKAI_API_KEY) {
       return new Response(
-        JSON.stringify({ error: "OpenAI API key not configured" }),
+        JSON.stringify({ error: "GrokAI API key not configured" }),
         {
           status: 500,
           headers: {
@@ -33,12 +33,12 @@ export async function POST(request: Request) {
       );
     }
 
-    // Call OpenAI API
-    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+    // Call GrokAI (xAI) API
+    const res = await fetch("https://api.x.ai/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
+        Authorization: `Bearer ${GROKAI_API_KEY}`,
       },
       body: JSON.stringify({
         model,
@@ -51,7 +51,7 @@ export async function POST(request: Request) {
 
     if (!res.ok) {
       const errorData = await res.text();
-      console.error("OpenAI API error:", errorData);
+      console.error("GrokAI API error:", errorData);
       return new Response(
         JSON.stringify({
           error: "Failed to generate response",
@@ -88,3 +88,4 @@ export async function POST(request: Request) {
     );
   }
 }
+

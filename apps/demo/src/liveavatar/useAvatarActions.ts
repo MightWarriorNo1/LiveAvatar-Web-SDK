@@ -17,7 +17,9 @@ export const useAvatarActions = (mode: "FULL" | "CUSTOM") => {
           method: "POST",
           body: JSON.stringify({ text: message }),
         });
-        const { audio } = await res.json();
+        const { audio: audioBase64 } = await res.json();
+        // Decode base64 to get raw PCM data
+        const audio = atob(audioBase64);
         return sessionRef.current.repeatAudio(audio);
       }
     },

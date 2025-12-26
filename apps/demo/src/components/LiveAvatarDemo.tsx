@@ -10,7 +10,9 @@ export const LiveAvatarDemo = () => {
 
   const handleStart = async () => {
     try {
-      const res = await fetch("/api/start-session", {
+      // Use CUSTOM mode session for GrokAI integration
+      // CUSTOM mode provides WebSocket support needed for repeatAudio()
+      const res = await fetch("/api/start-custom-session", {
         method: "POST",
       });
       console.log("RESPONSE", res);
@@ -21,6 +23,7 @@ export const LiveAvatarDemo = () => {
       }
       const { session_token } = await res.json();
       setSessionToken(session_token);
+      // Set mode to "FULL" so useTextChat uses GrokAI instead of OpenAI
       setMode("FULL");
     } catch (error: unknown) {
       setError((error as Error).message);

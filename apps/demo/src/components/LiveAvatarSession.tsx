@@ -59,11 +59,9 @@ const LiveAvatarSessionComponent: React.FC<{
 
   const { sendMessage } = useTextChat(mode);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const greetingSentRef = useRef<boolean>(false);
 
   useEffect(() => {
     if (sessionState === SessionState.DISCONNECTED) {
-      greetingSentRef.current = false;
       onSessionStopped();
     }
   }, [sessionState, onSessionStopped]);
@@ -75,52 +73,43 @@ const LiveAvatarSessionComponent: React.FC<{
   }, [attachElement, isStreamReady]);
 
   useEffect(() => {
-    if (isStreamReady && sessionState === SessionState.CONNECTED && !greetingSentRef.current) {
-      greetingSentRef.current = true;
-      // Use repeat() instead of sendMessage() so it works in both FULL and CUSTOM modes
-      // In CUSTOM mode, this will speak directly via ElevenLabs without going through OpenAI
-      repeat("Hello I am 6, your personal assistant, how can I help you today");
-    }
-  }, [isStreamReady, sessionState, repeat]);
-
-  useEffect(() => {
     if (sessionState === SessionState.INACTIVE) {
       startSession();
     }
   }, [startSession, sessionState]);
 
-  // const VoiceChatComponents = (
-  //   <>
-  //     <p>Voice Chat Active: {isActive ? "true" : "false"}</p>
-  //     <p>Voice Chat Loading: {isLoading ? "true" : "false"}</p>
-  //     {isActive && <p>Muted: {isMuted ? "true" : "false"}</p>}
-  //     <Button
-  //       onClick={() => {
-  //         if (isActive) {
-  //           stop();
-  //         } else {
-  //           start();
-  //         }
-  //       }}
-  //       disabled={isLoading}
-  //     >
-  //       {isActive ? "Stop Voice Chat" : "Start Voice Chat"}
-  //     </Button>
-  //     {isActive && (
-  //       <Button
-  //         onClick={() => {
-  //           if (isMuted) {
-  //             unmute();
-  //           } else {
-  //             mute();
-  //           }
-  //         }}
-  //       >
-  //         {isMuted ? "Unmute" : "Mute"}
-  //       </Button>
-  //     )}
-  //   </>
-  // );
+  const VoiceChatComponents = (
+    <>
+      <p>Voice Chat Active: {isActive ? "true" : "false"}</p>
+      <p>Voice Chat Loading: {isLoading ? "true" : "false"}</p>
+      {isActive && <p>Muted: {isMuted ? "true" : "false"}</p>}
+      <Button
+        onClick={() => {
+          if (isActive) {
+            stop();
+          } else {
+            start();
+          }
+        }}
+        disabled={isLoading}
+      >
+        {isActive ? "Stop Voice Chat" : "Start Voice Chat"}
+      </Button>
+      {isActive && (
+        <Button
+          onClick={() => {
+            if (isMuted) {
+              unmute();
+            } else {
+              mute();
+            }
+          }}
+        >
+          {isMuted ? "Unmute" : "Mute"}
+        </Button>
+      )}
+    </>
+  );
 
   return (
     <div className="fixed inset-0 w-screen h-screen bg-black flex flex-col">
@@ -152,7 +141,7 @@ const LiveAvatarSessionComponent: React.FC<{
       </div>
 
       {/* Controls overlay - hidden by default, can be shown on hover or kept visible */}
-      {/* <div className="absolute bottom-4 left-4 right-4 z-10 flex flex-col items-center gap-2 bg-black/50 p-4 rounded-md">
+      <div className="absolute bottom-4 left-4 right-4 z-10 flex flex-col items-center gap-2 bg-black/50 p-4 rounded-md">
         <div className="flex flex-row items-center gap-2 text-white text-xs">
           <p>Session: {sessionState}</p>
           <p>Quality: {connectionQuality}</p>
@@ -220,7 +209,7 @@ const LiveAvatarSessionComponent: React.FC<{
             Repeat
           </Button>
         </div>
-      </div> */}
+      </div>
     </div>
   );
 };
