@@ -58,7 +58,15 @@ const LiveAvatarSessionComponent: React.FC<{
     useAvatarActions(mode);
 
   const { sendMessage } = useTextChat(mode);
+  const { sessionRef } = useLiveAvatarContext();
   const videoRef = useRef<HTMLVideoElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraPreviewRef = useRef<HTMLVideoElement>(null);
+  const [isCameraActive, setIsCameraActive] = useState(false);
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const [imageAnalysis, setImageAnalysis] = useState<string | null>(null);
+  const [isAnalyzingImage, setIsAnalyzingImage] = useState(false);
 
   useEffect(() => {
     if (sessionState === SessionState.DISCONNECTED) {
@@ -77,6 +85,126 @@ const LiveAvatarSessionComponent: React.FC<{
       startSession();
     }
   }, [startSession, sessionState]);
+
+  // Cleanup camera stream on unmount
+  useEffect(() => {
+    return () => {
+      if (cameraStream) {
+        cameraStream.getTracks().forEach((track) => track.stop());
+      }
+    };
+  }, [cameraStream]);
+
+  const handleCameraClick = async () => {
+    if (isCameraActive) {
+      // Stop camera if already active
+      if (cameraStream) {
+        cameraStream.getTracks().forEach((track) => track.stop());
+        setCameraStream(null);
+      }
+      setIsCameraActive(false);
+      return;
+    }
+
+    try {
+      // First try to get rear camera (environment)
+      let stream: MediaStream | null = null;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "environment" },
+        });
+      } catch (error) {
+        // If rear camera fails, try front camera (user)
+        console.log("Rear camera not available, trying front camera");
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "user" },
+        });
+      }
+
+      if (stream && cameraPreviewRef.current) {
+        setCameraStream(stream);
+        cameraPreviewRef.current.srcObject = stream;
+        setIsCameraActive(true);
+      }
+    } catch (error) {
+      console.error("Error accessing camera:", error);
+      alert("Unable to access camera. Please check permissions.");
+    }
+  };
+
+  const handleFileUploadClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleCameraChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      // Handle camera image
+      console.log("Camera image selected:", file);
+      // Add your camera image handling logic here
+    }
+    // Reset input
+    if (cameraInputRef.current) {
+      cameraInputRef.current.value = "";
+    }
+  };
+
+  const closeCameraPreview = () => {
+    if (cameraStream) {
+      cameraStream.getTracks().forEach((track) => track.stop());
+      setCameraStream(null);
+    }
+    setIsCameraActive(false);
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      // Check if file is an image
+      if (!file.type.startsWith("image/")) {
+        alert("Please upload an image file");
+        if (fileInputRef.current) {
+          fileInputRef.current.value = "";
+        }
+        return;
+      }
+
+      setIsAnalyzingImage(true);
+      try {
+        const formData = new FormData();
+        formData.append("image", file);
+
+        const response = await fetch("/api/analyze-image", {
+          method: "POST",
+          body: formData,
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || "Failed to analyze image");
+        }
+
+        const data = await response.json();
+        setImageAnalysis(data.analysis);
+        console.log("Image analyzed successfully");
+        
+        // For FULL mode, send the analysis as context to the AI
+        if (mode === "FULL" && sessionRef.current) {
+          const contextMessage = `[IMAGE CONTEXT] I have uploaded an image. Here is the detailed analysis: ${data.analysis}. Please remember this analysis and use it to answer any questions I ask about the image or related content.`;
+          sessionRef.current.message(contextMessage);
+        }
+      } catch (error) {
+        console.error("Error analyzing image:", error);
+        alert("Failed to analyze image. Please try again.");
+      } finally {
+        setIsAnalyzingImage(false);
+      }
+    }
+    // Reset input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
 
   const VoiceChatComponents = (
     <>
@@ -122,6 +250,16 @@ const LiveAvatarSessionComponent: React.FC<{
             <p className="font-semibold">⚠️ Warning: {microphoneWarning}</p>
           </div>
         )}
+        {isAnalyzingImage && (
+          <div className="mt-4 bg-blue-500 text-white px-4 py-2 rounded-md max-w-2xl text-center">
+            <p className="font-semibold">🔄 Analyzing image...</p>
+          </div>
+        )}
+        {imageAnalysis && !isAnalyzingImage && (
+          <div className="mt-4 bg-green-500 text-white px-4 py-2 rounded-md max-w-2xl text-center">
+            <p className="font-semibold">✅ Image analyzed successfully</p>
+          </div>
+        )}
       </div>
 
       {/* Full screen video */}
@@ -132,6 +270,45 @@ const LiveAvatarSessionComponent: React.FC<{
           playsInline
           className="w-full h-full object-contain"
         />
+        {mode === "FULL" && (
+          <>
+            <input
+              ref={cameraInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={handleCameraChange}
+            />
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleFileChange}
+            />
+            <button
+              className="absolute bottom-20 left-1/4 bg-white text-black px-6 py-3 rounded-md z-20 transform -translate-x-1/2 flex items-center justify-center gap-2"
+              onClick={handleCameraClick}
+            >
+              📷 {isCameraActive ? "Close Camera" : "Camera"}
+            </button>
+            <button
+              className="absolute bottom-20 right-1/4 bg-white text-black px-6 py-3 rounded-md z-20 transform translate-x-1/2 flex items-center justify-center gap-2"
+              onClick={handleFileUploadClick}
+            >
+              📁 Upload
+            </button>
+            {/* {imageAnalysis && !isAnalyzingImage && (
+              <button
+                className="absolute bottom-32 left-1/2 bg-green-500 text-white px-6 py-3 rounded-md z-20 transform -translate-x-1/2 flex items-center justify-center gap-2 hover:bg-green-600"
+                onClick={() => repeat(imageAnalysis)}
+              >
+                🧪 Test: Speak Analysis
+              </button>
+            )} */}
+          </>
+        )}
         <button
           className="absolute bottom-4 right-4 bg-white text-black px-4 py-2 rounded-md z-20"
           onClick={() => stopSession()}
@@ -140,76 +317,25 @@ const LiveAvatarSessionComponent: React.FC<{
         </button>
       </div>
 
-      {/* Controls overlay - hidden by default, can be shown on hover or kept visible */}
-      {/* <div className="absolute bottom-4 left-4 right-4 z-10 flex flex-col items-center gap-2 bg-black/50 p-4 rounded-md">
-        <div className="flex flex-row items-center gap-2 text-white text-xs">
-          <p>Session: {sessionState}</p>
-          <p>Quality: {connectionQuality}</p>
-          {mode === "FULL" && (
-            <p>User: {isUserTalking ? "talking" : "silent"}</p>
-          )}
-          <p>Avatar: {isAvatarTalking ? "talking" : "silent"}</p>
-        </div>
-        {mode === "FULL" && (
-          <div className="flex flex-col items-center gap-2">
-            {VoiceChatComponents}
+      {/* Camera Preview Modal */}
+      {isCameraActive && (
+        <div className="absolute inset-0 bg-black bg-opacity-90 z-30 flex items-center justify-center">
+          <div className="relative w-full h-full max-w-4xl max-h-[80vh] flex flex-col">
+            <video
+              ref={cameraPreviewRef}
+              autoPlay
+              playsInline
+              className="w-full h-full object-contain"
+            />
+            <button
+              className="absolute top-4 right-4 bg-red-600 text-white px-6 py-3 rounded-md z-40 hover:bg-red-700"
+              onClick={closeCameraPreview}
+            >
+              Close Camera
+            </button>
           </div>
-        )}
-        <div className="flex flex-row items-center gap-2">
-          <Button
-            onClick={() => {
-              keepAlive();
-            }}
-          >
-            Keep Alive
-          </Button>
-          <Button
-            onClick={() => {
-              startListening();
-            }}
-          >
-            Start Listening
-          </Button>
-          <Button
-            onClick={() => {
-              stopListening();
-            }}
-          >
-            Stop Listening
-          </Button>
-          <Button
-            onClick={() => {
-              interrupt();
-            }}
-          >
-            Interrupt
-          </Button>
         </div>
-        <div className="flex flex-row items-center gap-2">
-          <input
-            type="text"
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            className="w-[400px] bg-white text-black px-4 py-2 rounded-md"
-          />
-          <Button
-            onClick={() => {
-              sendMessage(message);
-              setMessage("");
-            }}
-          >
-            Send
-          </Button>
-          <Button
-            onClick={() => {
-              repeat(message);
-              setMessage("");
-            }}
-          >
-            Repeat
-          </Button>
-        </div>
-      </div> */}
+      )}
     </div>
   );
 };

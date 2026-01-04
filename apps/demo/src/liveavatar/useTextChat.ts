@@ -5,13 +5,16 @@ export const useTextChat = (mode: "FULL" | "CUSTOM") => {
   const { sessionRef } = useLiveAvatarContext();
 
   const sendMessage = useCallback(
-    async (message: string) => {
+    async (message: string, imageAnalysis?: string | null) => {
       if (mode === "FULL") {
         return sessionRef.current.message(message);
       } else if (mode === "CUSTOM") {
         const response = await fetch("/api/openai-chat-complete", {
           method: "POST",
-          body: JSON.stringify({ message }),
+          body: JSON.stringify({ 
+            message,
+            image_analysis: imageAnalysis || undefined,
+          }),
         });
         const { response: chatResponseText } = await response.json();
         const res = await fetch("/api/elevenlabs-text-to-speech", {

@@ -10,6 +10,7 @@ export async function POST(request: Request) {
       message,
       model = "gpt-4o-mini",
       system_prompt = SYSTEM_PROMPT,
+      image_analysis,
     } = body;
 
     if (!message) {
@@ -33,6 +34,17 @@ export async function POST(request: Request) {
       );
     }
 
+    // Build messages array
+    const messages: Array<{ role: string; content: string }> = [
+      {
+        role: "system",
+        content: image_analysis
+          ? `${system_prompt}\n\nIMPORTANT CONTEXT: The user has uploaded an image. Here is the detailed analysis of that image:\n\n${image_analysis}\n\nWhen the user asks questions about the image or related content, use this analysis to provide accurate and detailed answers. Reference the analysis when relevant.`
+          : system_prompt,
+      },
+      { role: "user", content: message },
+    ];
+
     // Call OpenAI API
     const res = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
@@ -42,10 +54,7 @@ export async function POST(request: Request) {
       },
       body: JSON.stringify({
         model,
-        messages: [
-          { role: "system", content: system_prompt },
-          { role: "user", content: message },
-        ],
+        messages,
       }),
     });
 
