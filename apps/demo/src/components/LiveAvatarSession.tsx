@@ -141,7 +141,7 @@ const LiveAvatarSessionComponent: React.FC<{
       </div>
 
       {/* Controls overlay - hidden by default, can be shown on hover or kept visible */}
-      <div className="absolute bottom-4 left-4 right-4 z-10 flex flex-col items-center gap-2 bg-black/50 p-4 rounded-md">
+      {/* <div className="absolute bottom-4 left-4 right-4 z-10 flex flex-col items-center gap-2 bg-black/50 p-4 rounded-md">
         <div className="flex flex-row items-center gap-2 text-white text-xs">
           <p>Session: {sessionState}</p>
           <p>Quality: {connectionQuality}</p>
@@ -209,7 +209,7 @@ const LiveAvatarSessionComponent: React.FC<{
             Repeat
           </Button>
         </div>
-      </div>
+      </div> */}
     </div>
   );
 };

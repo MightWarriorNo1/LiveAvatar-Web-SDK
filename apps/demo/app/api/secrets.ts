@@ -11,6 +11,3 @@ export const LANGUAGE = process.env.LIVEAVATAR_LANGUAGE || "";
 // CUSTOM MODE Customizations
 export const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY || "";
 export const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
-
-// GrokAI (xAI) API Key for FULL mode
-export const GROKAI_API_KEY = process.env.GROKAI_API_KEY || "";
