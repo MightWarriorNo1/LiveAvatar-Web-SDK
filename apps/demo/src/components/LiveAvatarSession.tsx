@@ -269,70 +269,62 @@ const LiveAvatarSessionComponent: React.FC<{
       </div>
 
       {/* Full screen video */}
-      <div className="relative w-full h-full flex items-center justify-center pt-20 pb-24">
+      <div className={`relative w-full flex-1 flex items-center justify-center ${isCameraActive ? 'pt-24' : ''}`}>
         <video
           ref={videoRef}
           autoPlay
           playsInline
-          className="w-full h-full object-contain"
+          className={`${isCameraActive ? 'max-h-[calc(100vh-6rem)]' : 'h-full'} w-full object-contain`}
         />
+        {mode === "FULL" && (
+          <>
+            <input
+              ref={cameraInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={handleCameraChange}
+            />
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleFileChange}
+            />
+          </>
+        )}
       </div>
 
-      {/* Fixed buttons at bottom */}
+      {/* Fixed buttons at bottom - positioned relative to viewport */}
       {mode === "FULL" && (
         <>
-          <input
-            ref={cameraInputRef}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            className="hidden"
-            onChange={handleCameraChange}
-          />
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={handleFileChange}
-          />
-          <div className="fixed bottom-0 left-0 right-0 z-20 flex items-center justify-center gap-4 pb-4">
-            <button
-              className="bg-white text-black px-6 py-3 rounded-md flex items-center justify-center gap-2"
-              onClick={handleCameraClick}
-            >
-              📷 {isCameraActive ? "Close Camera" : "Camera"}
-            </button>
-            <button
-              className="bg-white text-black px-6 py-3 rounded-md flex items-center justify-center gap-2"
-              onClick={handleFileUploadClick}
-            >
-              📁 Upload
-            </button>
-            <button
-              className="bg-white text-black px-4 py-2 rounded-md"
-              onClick={() => stopSession()}
-            >
-              Stop
-            </button>
-          </div>
+          <button
+            className="fixed bottom-20 left-1/4 bg-white text-black px-6 py-3 rounded-md z-20 transform -translate-x-1/2 flex items-center justify-center gap-2"
+            onClick={handleCameraClick}
+          >
+            📷 {isCameraActive ? "Close Camera" : "Camera"}
+          </button>
+          <button
+            className="fixed bottom-20 right-1/4 bg-white text-black px-6 py-3 rounded-md z-20 transform translate-x-1/2 flex items-center justify-center gap-2"
+            onClick={handleFileUploadClick}
+          >
+            📁 Upload
+          </button>
         </>
       )}
-      {mode === "CUSTOM" && (
-        <div className="fixed bottom-0 right-0 z-20 p-4">
-          <button
-            className="bg-white text-black px-4 py-2 rounded-md"
-            onClick={() => stopSession()}
-          >
-            Stop
-          </button>
-        </div>
-      )}
+      <button
+        className="fixed bottom-4 right-4 bg-white text-black px-4 py-2 rounded-md z-20"
+        onClick={() => stopSession()}
+      >
+        Stop
+      </button>
 
       {/* Camera Preview Modal */}
       {isCameraActive && (
-        <div className="fixed inset-0 bg-black bg-opacity-90 z-30 flex items-center justify-center pt-20 pb-24">
-          <div className="relative w-full h-full max-w-4xl flex flex-col">
+        <div className="absolute inset-0 bg-black bg-opacity-90 z-30 flex items-center justify-center pt-24">
+          <div className="relative w-full h-full max-w-4xl max-h-[calc(100vh-8rem)] flex flex-col">
             <video
               ref={cameraPreviewRef}
               autoPlay
