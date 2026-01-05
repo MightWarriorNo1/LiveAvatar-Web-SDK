@@ -116,8 +116,8 @@ const LiveAvatarSessionComponent: React.FC<{
     try {
       // Capture frame from video element
       const canvas = document.createElement("canvas");
-      canvas.width = cameraPreviewRef.current.videoWidth || 640;
-      canvas.height = cameraPreviewRef.current.videoHeight || 480;
+      canvas.width = cameraPreviewRef.current.videoWidth || 160;
+      canvas.height = cameraPreviewRef.current.videoHeight || 120;
       const ctx = canvas.getContext("2d");
       
       if (!ctx) {
