@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState, useCallback } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   LiveAvatarContextProvider,
   useSession,
@@ -8,7 +8,7 @@ import {
   useVoiceChat,
   useLiveAvatarContext,
 } from "../liveavatar";
-import { SessionState, AgentEventsEnum } from "@heygen/liveavatar-web-sdk";
+import { SessionState } from "@heygen/liveavatar-web-sdk";
 import { useAvatarActions } from "../liveavatar/useAvatarActions";
 
 const Button: React.FC<{
@@ -67,7 +67,6 @@ const LiveAvatarSessionComponent: React.FC<{
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [imageAnalysis, setImageAnalysis] = useState<string | null>(null);
   const [isAnalyzingImage, setIsAnalyzingImage] = useState(false);
-  const [isAnalyzingCamera, setIsAnalyzingCamera] = useState(false);
 
   useEffect(() => {
     if (sessionState === SessionState.DISCONNECTED) {
@@ -98,121 +97,10 @@ const LiveAvatarSessionComponent: React.FC<{
 
   // Set camera stream to video element when both are available
   useEffect(() => {
-    if (cameraStream && cameraPreviewRef.current && isCameraActive) {
+    if (cameraStream && cameraPreviewRef.current) {
       cameraPreviewRef.current.srcObject = cameraStream;
-    } else if (!cameraStream && cameraPreviewRef.current) {
-      // Clean up when stream is removed
-      cameraPreviewRef.current.srcObject = null;
     }
   }, [cameraStream, isCameraActive]);
-
-  // Function to capture frame from camera and analyze it
-  const analyzeCameraFeed = useCallback(async () => {
-    if (!cameraPreviewRef.current || !isCameraActive) {
-      return;
-    }
-
-    setIsAnalyzingCamera(true);
-    try {
-      // Capture frame from video element
-      const canvas = document.createElement("canvas");
-      canvas.width = cameraPreviewRef.current.videoWidth || 160;
-      canvas.height = cameraPreviewRef.current.videoHeight || 120;
-      const ctx = canvas.getContext("2d");
-      
-      if (!ctx) {
-        throw new Error("Could not get canvas context");
-      }
-
-      ctx.drawImage(cameraPreviewRef.current, 0, 0, canvas.width, canvas.height);
-      
-      // Convert canvas to blob
-      canvas.toBlob(async (blob) => {
-        if (!blob) {
-          throw new Error("Failed to capture frame");
-        }
-
-        try {
-          // Create FormData and send to analyze-image API
-          const formData = new FormData();
-          formData.append("image", blob, "camera-frame.jpg");
-
-          const response = await fetch("/api/analyze-image", {
-            method: "POST",
-            body: formData,
-          });
-
-          if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error || "Failed to analyze camera feed");
-          }
-
-          const data = await response.json();
-          const analysis = data.analysis;
-
-          // Have the avatar speak the analysis
-          if (sessionRef.current && mode === "FULL") {
-            sessionRef.current.message(analysis);
-          }
-        } catch (error) {
-          console.error("Error analyzing camera feed:", error);
-          if (sessionRef.current && mode === "FULL") {
-            sessionRef.current.message("Oops! I had trouble analyzing what I'm seeing through the camera. Could you try asking again?");
-          }
-        } finally {
-          setIsAnalyzingCamera(false);
-        }
-      }, "image/jpeg", 0.95);
-    } catch (error) {
-      console.error("Error capturing camera frame:", error);
-      setIsAnalyzingCamera(false);
-      if (sessionRef.current && mode === "FULL") {
-        sessionRef.current.message("Hmm, I couldn't capture what I'm seeing right now. Let me try again in a moment!");
-      }
-    }
-  }, [isCameraActive, sessionRef, mode]);
-
-  // Listen for user transcriptions and handle camera-related questions
-  useEffect(() => {
-    if (!sessionRef.current) return;
-
-    const handleUserTranscription = (event: { text: string }) => {
-      const userMessage = event.text.toLowerCase();
-      
-      // Check if message is related to camera/seeing/viewing
-      const cameraKeywords = [
-        "camera",
-        "see",
-        "seeing",
-        "what can you see",
-        "what do you see",
-        "what are you seeing",
-        "describe what you see",
-        "tell me what you see",
-        "what's in the camera",
-        "what's on the camera",
-        "analyze the camera",
-        "look at the camera",
-        "view the camera",
-      ];
-
-      const isCameraRelated = cameraKeywords.some(keyword => 
-        userMessage.includes(keyword)
-      );
-
-      if (isCameraRelated && isCameraActive && cameraPreviewRef.current && !isAnalyzingCamera) {
-        analyzeCameraFeed();
-      }
-    };
-
-    sessionRef.current.on(AgentEventsEnum.USER_TRANSCRIPTION, handleUserTranscription);
-
-    return () => {
-      if (sessionRef.current) {
-        sessionRef.current.off(AgentEventsEnum.USER_TRANSCRIPTION, handleUserTranscription);
-      }
-    };
-  }, [sessionRef, isCameraActive, isAnalyzingCamera, analyzeCameraFeed]);
 
   const handleCameraClick = async () => {
     if (isCameraActive) {
@@ -360,7 +248,7 @@ const LiveAvatarSessionComponent: React.FC<{
   return (
     <div className="fixed inset-0 w-screen h-screen bg-black flex flex-col">
       {/* Text overlays at the top */}
-      <div className="absolute top-0 left-0 right-0 z-10 flex flex-col items-center pt-4">
+      <div className="absolute top-0 left-0 right-0 z-10 flex flex-col items-center pt-4 pb-2">
         <h1 className="text-white text-2xl font-semibold">iSolveUrProblems-Beta</h1>
         <p className="text-white text-xs mt-1">Everything except Murder</p>
         {microphoneWarning && (
@@ -368,86 +256,98 @@ const LiveAvatarSessionComponent: React.FC<{
             <p className="font-semibold">⚠️ Warning: {microphoneWarning}</p>
           </div>
         )}
-        {(isAnalyzingImage || isAnalyzingCamera) && (
+        {isAnalyzingImage && (
           <div className="mt-4 bg-blue-500 text-white px-4 py-2 rounded-md max-w-2xl text-center">
-            <p className="font-semibold">🔄 {isAnalyzingCamera ? "Analyzing camera feed..." : "Analyzing image..."}</p>
+            <p className="font-semibold">🔄 Analyzing image...</p>
           </div>
         )}
-        {imageAnalysis && !isAnalyzingImage && !isAnalyzingCamera && (
+        {imageAnalysis && !isAnalyzingImage && (
           <div className="mt-4 bg-green-500 text-white px-4 py-2 rounded-md max-w-2xl text-center">
             <p className="font-semibold">✅ Image analyzed successfully</p>
           </div>
         )}
       </div>
 
-      {/* Camera Preview Full Screen (when active) */}
-      {isCameraActive && (
-        <video
-          ref={cameraPreviewRef}
-          autoPlay
-          playsInline
-          className="absolute inset-0 w-full h-full object-cover z-0"
-        />
-      )}
-
-      {/* Avatar Video - Full screen when camera inactive, small corner when camera active */}
-      <div className={`relative ${isCameraActive ? 'w-64 h-48 top-4 left-4' : 'w-full h-full'} flex items-center justify-center z-10`}>
+      {/* Full screen video */}
+      <div className="relative w-full h-full flex items-center justify-center pt-20 pb-24">
         <video
           ref={videoRef}
           autoPlay
           playsInline
-          className={`${isCameraActive ? 'w-full h-full object-contain rounded-lg shadow-2xl border-2 border-white' : 'w-full h-full object-contain'}`}
+          className="w-full h-full object-contain"
         />
       </div>
 
-      {/* Control Buttons */}
-      <div className="relative z-20">
-        {mode === "FULL" && (
-          <>
-            <input
-              ref={cameraInputRef}
-              type="file"
-              accept="image/*"
-              capture="environment"
-              className="hidden"
-              onChange={handleCameraChange}
-            />
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={handleFileChange}
-            />
+      {/* Fixed buttons at bottom */}
+      {mode === "FULL" && (
+        <>
+          <input
+            ref={cameraInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={handleCameraChange}
+          />
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handleFileChange}
+          />
+          <div className="fixed bottom-0 left-0 right-0 z-20 flex items-center justify-center gap-4 pb-4">
             <button
-              className="absolute bottom-20 left-1/4 bg-white text-black px-6 py-3 rounded-md z-20 transform -translate-x-1/2 flex items-center justify-center gap-2 hover:bg-gray-200"
+              className="bg-white text-black px-6 py-3 rounded-md flex items-center justify-center gap-2"
               onClick={handleCameraClick}
             >
               📷 {isCameraActive ? "Close Camera" : "Camera"}
             </button>
             <button
-              className="absolute bottom-20 right-1/4 bg-white text-black px-6 py-3 rounded-md z-20 transform translate-x-1/2 flex items-center justify-center gap-2 hover:bg-gray-200"
+              className="bg-white text-black px-6 py-3 rounded-md flex items-center justify-center gap-2"
               onClick={handleFileUploadClick}
             >
               📁 Upload
             </button>
-            {/* {imageAnalysis && !isAnalyzingImage && (
-              <button
-                className="absolute bottom-32 left-1/2 bg-green-500 text-white px-6 py-3 rounded-md z-20 transform -translate-x-1/2 flex items-center justify-center gap-2 hover:bg-green-600"
-                onClick={() => repeat(imageAnalysis)}
-              >
-                🧪 Test: Speak Analysis
-              </button>
-            )} */}
-          </>
-        )}
-        <button
-          className="absolute bottom-4 right-4 bg-white text-black px-4 py-2 rounded-md z-20 hover:bg-gray-200"
-          onClick={() => stopSession()}
-        >
-          Stop
-        </button>
-      </div>
+            <button
+              className="bg-white text-black px-4 py-2 rounded-md"
+              onClick={() => stopSession()}
+            >
+              Stop
+            </button>
+          </div>
+        </>
+      )}
+      {mode === "CUSTOM" && (
+        <div className="fixed bottom-0 right-0 z-20 p-4">
+          <button
+            className="bg-white text-black px-4 py-2 rounded-md"
+            onClick={() => stopSession()}
+          >
+            Stop
+          </button>
+        </div>
+      )}
+
+      {/* Camera Preview Modal */}
+      {isCameraActive && (
+        <div className="fixed inset-0 bg-black bg-opacity-90 z-30 flex items-center justify-center pt-20 pb-24">
+          <div className="relative w-full h-full max-w-4xl flex flex-col">
+            <video
+              ref={cameraPreviewRef}
+              autoPlay
+              playsInline
+              className="w-full h-full object-contain"
+            />
+            <button
+              className="absolute top-4 right-4 bg-red-600 text-white px-6 py-3 rounded-md z-40 hover:bg-red-700"
+              onClick={closeCameraPreview}
+            >
+              Close Camera
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

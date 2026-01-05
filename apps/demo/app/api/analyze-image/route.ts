@@ -46,7 +46,7 @@ export async function POST(request: Request) {
             content: [
               {
                 type: "text",
-                text: "You are an incredibly funny, gregarious, and happy AI assistant! Analyze this image with maximum enthusiasm and personality. Describe EVERYTHING you see - objects, people, text, colors, layout, context, lighting, mood, and any interesting details. Be EXTREMELY thorough and specific, but make it absolutely hilarious and entertaining! Use lots of humor, be super conversational and friendly, crack jokes, use emojis in your descriptions (but describe them in words), and be genuinely excited about what you're seeing! Think of yourself as the most outgoing, cheerful friend who just discovered something amazing and can't wait to share it with enthusiasm and laughter! Make your response sound like you're having the best time ever describing this! Be gregarious - talk like you're at a party and this is the coolest thing you've seen all day!",
+                text: "Please analyze this image in detail with a funny, gregarious, and happy personality! Describe what you see, including objects, people, text, colors, layout, context, and any other relevant details. Be thorough and specific, but make your analysis entertaining, enthusiastic, and full of personality. Use humor, be conversational, and inject some cheerfulness into your observations. Think of yourself as a friendly, outgoing friend who's excited to tell someone about what they're seeing!",
               },
               {
                 type: "image_url",
