@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 import {
   LiveAvatarContextProvider,
   useSession,
@@ -8,7 +8,7 @@ import {
   useVoiceChat,
   useLiveAvatarContext,
 } from "../liveavatar";
-import { SessionState } from "@heygen/liveavatar-web-sdk";
+import { SessionState, AgentEventsEnum } from "@heygen/liveavatar-web-sdk";
 import { useAvatarActions } from "../liveavatar/useAvatarActions";
 
 const Button: React.FC<{
@@ -67,6 +67,7 @@ const LiveAvatarSessionComponent: React.FC<{
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [imageAnalysis, setImageAnalysis] = useState<string | null>(null);
   const [isAnalyzingImage, setIsAnalyzingImage] = useState(false);
+  const [isProcessingCameraQuestion, setIsProcessingCameraQuestion] = useState(false);
 
   useEffect(() => {
     if (sessionState === SessionState.DISCONNECTED) {
@@ -101,6 +102,138 @@ const LiveAvatarSessionComponent: React.FC<{
       cameraPreviewRef.current.srcObject = cameraStream;
     }
   }, [cameraStream, isCameraActive]);
+
+  // Function to capture frame from camera video
+  const captureCameraFrame = useCallback(async (): Promise<File | null> => {
+    if (!cameraPreviewRef.current || !isCameraActive) {
+      return null;
+    }
+
+    try {
+      const video = cameraPreviewRef.current;
+      const canvas = document.createElement("canvas");
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        return null;
+      }
+      ctx.drawImage(video, 0, 0);
+      
+      return new Promise((resolve) => {
+        canvas.toBlob((blob) => {
+          if (blob) {
+            const file = new File([blob], "camera-frame.jpg", { type: "image/jpeg" });
+            resolve(file);
+          } else {
+            resolve(null);
+          }
+        }, "image/jpeg", 0.95);
+      });
+    } catch (error) {
+      console.error("Error capturing camera frame:", error);
+      return null;
+    }
+  }, [isCameraActive]);
+
+  // Function to check if user question is about the camera
+  const isCameraRelatedQuestion = useCallback((text: string): boolean => {
+    const cameraKeywords = [
+      "camera",
+      "what can you see",
+      "what do you see",
+      "what are you seeing",
+      "describe what you see",
+      "explain what you see",
+      "tell me about",
+      "what's in",
+      "what is in",
+      "analyze",
+      "look at",
+      "see via camera",
+      "via camera",
+    ];
+    const lowerText = text.toLowerCase();
+    return cameraKeywords.some((keyword) => lowerText.includes(keyword));
+  }, []);
+
+  // Listen to user transcriptions and handle camera-related questions
+  useEffect(() => {
+    if (!sessionRef.current || !isCameraActive) {
+      return;
+    }
+
+    const handleUserTranscription = async (event: { text: string }) => {
+      const userText = event.text;
+      
+      // Check if the question is about the camera
+      if (isCameraRelatedQuestion(userText) && !isProcessingCameraQuestion) {
+        setIsProcessingCameraQuestion(true);
+        setIsAnalyzingImage(true);
+
+        try {
+          // Capture frame from camera
+          const frameFile = await captureCameraFrame();
+          
+          if (!frameFile) {
+            console.error("Failed to capture camera frame");
+            setIsProcessingCameraQuestion(false);
+            setIsAnalyzingImage(false);
+            return;
+          }
+
+          // Send to analyze-image API
+          const formData = new FormData();
+          formData.append("image", frameFile);
+
+          const response = await fetch("/api/analyze-image", {
+            method: "POST",
+            body: formData,
+          });
+
+          if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || "Failed to analyze camera frame");
+          }
+
+          const data = await response.json();
+          const analysis = data.analysis;
+          setImageAnalysis(analysis);
+
+          // Format the response as a conversational message for the avatar
+          // The analysis from GrokAI is already funny, gregarious, and happy
+          const responseMessage = `Oh wow! Let me tell you what I'm seeing through the camera! ${analysis} Pretty cool, right?`;
+
+          // Send the response to the avatar
+          if (sessionRef.current && mode === "FULL") {
+            sessionRef.current.message(responseMessage);
+          }
+        } catch (error) {
+          console.error("Error processing camera question:", error);
+          // Send a friendly error message
+          if (sessionRef.current && mode === "FULL") {
+            sessionRef.current.message("Oops! I had a little trouble analyzing what I'm seeing right now. Could you try asking again?");
+          }
+        } finally {
+          setIsProcessingCameraQuestion(false);
+          setIsAnalyzingImage(false);
+        }
+      }
+    };
+
+    sessionRef.current.on(AgentEventsEnum.USER_TRANSCRIPTION, handleUserTranscription);
+
+    return () => {
+      if (sessionRef.current) {
+        // Use removeListener if off is not available
+        if (typeof (sessionRef.current as any).off === 'function') {
+          (sessionRef.current as any).off(AgentEventsEnum.USER_TRANSCRIPTION, handleUserTranscription);
+        } else if (typeof (sessionRef.current as any).removeListener === 'function') {
+          (sessionRef.current as any).removeListener(AgentEventsEnum.USER_TRANSCRIPTION, handleUserTranscription);
+        }
+      }
+    };
+  }, [sessionRef, isCameraActive, isProcessingCameraQuestion, mode, captureCameraFrame, isCameraRelatedQuestion]);
 
   const handleCameraClick = async () => {
     if (isCameraActive) {
