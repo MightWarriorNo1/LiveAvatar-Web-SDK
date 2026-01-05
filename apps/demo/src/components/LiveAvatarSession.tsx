@@ -270,12 +270,18 @@ const LiveAvatarSessionComponent: React.FC<{
 
       {/* Full screen video */}
       <div className={`relative w-full flex-1 flex items-center justify-center ${isCameraActive ? 'pt-24' : ''}`}>
+        {/* Avatar video - full screen when camera inactive, small overlay in left corner when camera active */}
         <video
           ref={videoRef}
           autoPlay
           playsInline
-          className={`${isCameraActive ? 'max-h-[calc(100vh-6rem)]' : 'h-full'} w-full object-contain`}
+          className={`${
+            isCameraActive 
+              ? 'absolute top-4 left-4 w-64 h-48 object-contain z-20 rounded-lg border-2 border-white shadow-2xl' 
+              : 'h-full w-full object-contain'
+          }`}
         />
+        
         {mode === "FULL" && (
           <>
             <input
@@ -294,6 +300,24 @@ const LiveAvatarSessionComponent: React.FC<{
               onChange={handleFileChange}
             />
           </>
+        )}
+
+        {/* Camera Preview - full screen under header when active */}
+        {isCameraActive && (
+          <div className="absolute inset-0 pt-24 flex items-center justify-center z-10">
+            <video
+              ref={cameraPreviewRef}
+              autoPlay
+              playsInline
+              className="max-h-[calc(100vh-6rem)] w-full object-contain"
+            />
+            <button
+              className="absolute top-4 right-4 bg-red-600 text-white px-6 py-3 rounded-md z-40 hover:bg-red-700"
+              onClick={closeCameraPreview}
+            >
+              Close Camera
+            </button>
+          </div>
         )}
       </div>
 
@@ -320,26 +344,6 @@ const LiveAvatarSessionComponent: React.FC<{
       >
         Stop
       </button>
-
-      {/* Camera Preview Modal */}
-      {isCameraActive && (
-        <div className="absolute inset-0 bg-black bg-opacity-90 z-30 flex items-center justify-center pt-24">
-          <div className="relative w-full h-full max-w-4xl max-h-[calc(100vh-8rem)] flex flex-col">
-            <video
-              ref={cameraPreviewRef}
-              autoPlay
-              playsInline
-              className="w-full h-full object-contain"
-            />
-            <button
-              className="absolute top-4 right-4 bg-red-600 text-white px-6 py-3 rounded-md z-40 hover:bg-red-700"
-              onClick={closeCameraPreview}
-            >
-              Close Camera
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
