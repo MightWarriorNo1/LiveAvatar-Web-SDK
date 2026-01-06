@@ -68,6 +68,8 @@ const LiveAvatarSessionComponent: React.FC<{
   const [imageAnalysis, setImageAnalysis] = useState<string | null>(null);
   const [isAnalyzingImage, setIsAnalyzingImage] = useState(false);
   const [isProcessingCameraQuestion, setIsProcessingCameraQuestion] = useState(false);
+  const lastProcessedQuestionRef = useRef<string>("");
+  const processingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (sessionState === SessionState.DISCONNECTED) {
@@ -92,6 +94,10 @@ const LiveAvatarSessionComponent: React.FC<{
     return () => {
       if (cameraStream) {
         cameraStream.getTracks().forEach((track) => track.stop());
+      }
+      // Cleanup timeout on unmount
+      if (processingTimeoutRef.current) {
+        clearTimeout(processingTimeoutRef.current);
       }
     };
   }, [cameraStream]);
@@ -205,7 +211,7 @@ const LiveAvatarSessionComponent: React.FC<{
     }
 
     const handleUserTranscription = async (event: { text: string }) => {
-      const userText = event.text;
+      const userText = event.text.trim();
       console.log("User transcription received:", userText);
       
       // Only process if camera is active
@@ -213,67 +219,98 @@ const LiveAvatarSessionComponent: React.FC<{
         return;
       }
       
-      // Process ALL questions when camera is active (not just camera-related ones)
-      if (!isProcessingCameraQuestion && userText.trim().length > 0) {
-        console.log("Processing question with camera frame analysis...");
-        setIsProcessingCameraQuestion(true);
-        setIsAnalyzingImage(true);
+      // Skip if empty, already processing, or same question as last processed
+      if (
+        userText.length === 0 ||
+        isProcessingCameraQuestion ||
+        lastProcessedQuestionRef.current === userText
+      ) {
+        console.log("Skipping transcription:", {
+          empty: userText.length === 0,
+          processing: isProcessingCameraQuestion,
+          duplicate: lastProcessedQuestionRef.current === userText
+        });
+        return;
+      }
+      
+      // Clear any existing timeout
+      if (processingTimeoutRef.current) {
+        clearTimeout(processingTimeoutRef.current);
+      }
+      
+      // Mark as processing and store the question
+      console.log("Processing question with camera frame analysis...");
+      setIsProcessingCameraQuestion(true);
+      setIsAnalyzingImage(true);
+      lastProcessedQuestionRef.current = userText;
 
-        try {
-          // Capture frame from camera
-          console.log("Capturing camera frame...");
-          const frameFile = await captureCameraFrame();
-          
-          if (!frameFile) {
-            console.error("Failed to capture camera frame");
-            if (sessionRef.current && mode === "FULL") {
-              sessionRef.current.message("Hmm, I'm having trouble capturing what I'm seeing right now. Could you try asking again in a moment?");
-            }
-            setIsProcessingCameraQuestion(false);
-            setIsAnalyzingImage(false);
-            return;
-          }
-
-          console.log("Frame captured, sending to API with question:", userText);
-          // Send to analyze-image API with the user's question
-          const formData = new FormData();
-          formData.append("image", frameFile);
-          formData.append("question", userText);
-
-          const response = await fetch("/api/analyze-image", {
-            method: "POST",
-            body: formData,
-          });
-
-          if (!response.ok) {
-            const error = await response.json();
-            console.error("API error:", error);
-            throw new Error(error.error || "Failed to analyze camera frame");
-          }
-
-          const data = await response.json();
-          const analysis = data.analysis;
-          console.log("Analysis received:", analysis.substring(0, 100) + "...");
-          setImageAnalysis(analysis);
-
-          // The analysis from GrokAI already includes the answer to the question with funny, gregarious, and happy tone
-          const responseMessage = analysis;
-
-          // Send the response to the avatar
+      try {
+        // Capture frame from camera
+        console.log("Capturing camera frame...");
+        const frameFile = await captureCameraFrame();
+        
+        if (!frameFile) {
+          console.error("Failed to capture camera frame");
           if (sessionRef.current && mode === "FULL") {
-            console.log("Sending response to avatar");
-            sessionRef.current.message(responseMessage);
+            sessionRef.current.message("Hmm, I'm having trouble capturing what I'm seeing right now. Could you try asking again in a moment?");
           }
-        } catch (error) {
-          console.error("Error processing camera question:", error);
-          // Send a friendly error message
-          if (sessionRef.current && mode === "FULL") {
-            sessionRef.current.message("Oops! I had a little trouble analyzing what I'm seeing right now. Could you try asking again?");
-          }
-        } finally {
           setIsProcessingCameraQuestion(false);
           setIsAnalyzingImage(false);
+          // Reset after a delay to allow retry
+          processingTimeoutRef.current = setTimeout(() => {
+            lastProcessedQuestionRef.current = "";
+          }, 2000);
+          return;
         }
+
+        console.log("Frame captured, sending to API with question:", userText);
+        // Send to analyze-image API with the user's question
+        const formData = new FormData();
+        formData.append("image", frameFile);
+        formData.append("question", userText);
+
+        const response = await fetch("/api/analyze-image", {
+          method: "POST",
+          body: formData,
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          console.error("API error:", error);
+          throw new Error(error.error || "Failed to analyze camera frame");
+        }
+
+        const data = await response.json();
+        const analysis = data.analysis;
+        console.log("Analysis received:", analysis.substring(0, 100) + "...");
+        setImageAnalysis(analysis);
+
+        // The analysis from GrokAI already includes the answer to the question with funny, gregarious, and happy tone
+        const responseMessage = analysis;
+
+        // Send the response to the avatar
+        if (sessionRef.current && mode === "FULL") {
+          console.log("Sending response to avatar");
+          sessionRef.current.message(responseMessage);
+        }
+        
+        // Reset the last processed question after a delay to allow the same question to be asked again later
+        processingTimeoutRef.current = setTimeout(() => {
+          lastProcessedQuestionRef.current = "";
+        }, 5000);
+      } catch (error) {
+        console.error("Error processing camera question:", error);
+        // Send a friendly error message
+        if (sessionRef.current && mode === "FULL") {
+          sessionRef.current.message("Oops! I had a little trouble analyzing what I'm seeing right now. Could you try asking again?");
+        }
+        // Reset after error
+        processingTimeoutRef.current = setTimeout(() => {
+          lastProcessedQuestionRef.current = "";
+        }, 2000);
+      } finally {
+        setIsProcessingCameraQuestion(false);
+        setIsAnalyzingImage(false);
       }
     };
 
@@ -281,6 +318,9 @@ const LiveAvatarSessionComponent: React.FC<{
     sessionRef.current.on(AgentEventsEnum.USER_TRANSCRIPTION, handleUserTranscription);
 
     return () => {
+      if (processingTimeoutRef.current) {
+        clearTimeout(processingTimeoutRef.current);
+      }
       if (sessionRef.current) {
         console.log("Cleaning up USER_TRANSCRIPTION listener");
         // Use removeListener if off is not available
@@ -352,6 +392,14 @@ const LiveAvatarSessionComponent: React.FC<{
       setCameraStream(null);
     }
     setIsCameraActive(false);
+    // Reset processing state when camera is closed
+    setIsProcessingCameraQuestion(false);
+    setIsAnalyzingImage(false);
+    lastProcessedQuestionRef.current = "";
+    if (processingTimeoutRef.current) {
+      clearTimeout(processingTimeoutRef.current);
+      processingTimeoutRef.current = null;
+    }
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
