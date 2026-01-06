@@ -410,7 +410,7 @@ const LiveAvatarSessionComponent: React.FC<{
           playsInline
           className={`${
             isCameraActive 
-              ? 'absolute top-4 left-4 w-64 h-48 object-contain z-20 rounded-lg border-2 border-white shadow-2xl' 
+              ? 'absolute top-24 left-4 w-64 h-48 object-contain z-20 rounded-lg border-2 border-white shadow-2xl' 
               : 'h-full w-full object-contain'
           }`}
         />
