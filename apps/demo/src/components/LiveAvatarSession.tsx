@@ -99,33 +99,95 @@ const LiveAvatarSessionComponent: React.FC<{
   // Set camera stream to video element when both are available
   useEffect(() => {
     if (cameraStream && cameraPreviewRef.current) {
-      cameraPreviewRef.current.srcObject = cameraStream;
+      const video = cameraPreviewRef.current;
+      video.srcObject = cameraStream;
+      
+      // Ensure video plays
+      video.play().catch((error) => {
+        console.error("Error playing camera video:", error);
+      });
+      
+      // Log when video is ready
+      const onLoadedMetadata = () => {
+        console.log("Camera video metadata loaded:", {
+          width: video.videoWidth,
+          height: video.videoHeight,
+          readyState: video.readyState
+        });
+      };
+      
+      video.addEventListener("loadedmetadata", onLoadedMetadata);
+      
+      return () => {
+        video.removeEventListener("loadedmetadata", onLoadedMetadata);
+      };
     }
   }, [cameraStream, isCameraActive]);
 
   // Function to capture frame from camera video
   const captureCameraFrame = useCallback(async (): Promise<File | null> => {
     if (!cameraPreviewRef.current || !isCameraActive) {
+      console.error("Camera preview ref not available or camera not active");
       return null;
     }
 
     try {
       const video = cameraPreviewRef.current;
+      
+      // Wait for video to be ready with valid dimensions
+      if (video.readyState < 2) {
+        // Video not ready, wait for loadedmetadata
+        await new Promise<void>((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            reject(new Error("Video metadata loading timeout"));
+          }, 3000);
+          
+          const onLoadedMetadata = () => {
+            clearTimeout(timeout);
+            video.removeEventListener("loadedmetadata", onLoadedMetadata);
+            resolve();
+          };
+          
+          video.addEventListener("loadedmetadata", onLoadedMetadata);
+          
+          // If already loaded, resolve immediately
+          if (video.readyState >= 2) {
+            clearTimeout(timeout);
+            video.removeEventListener("loadedmetadata", onLoadedMetadata);
+            resolve();
+          }
+        });
+      }
+
+      // Check if video has valid dimensions
+      if (video.videoWidth === 0 || video.videoHeight === 0) {
+        console.error("Video has invalid dimensions:", video.videoWidth, video.videoHeight);
+        return null;
+      }
+
       const canvas = document.createElement("canvas");
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
       const ctx = canvas.getContext("2d");
       if (!ctx) {
+        console.error("Failed to get canvas context");
         return null;
       }
-      ctx.drawImage(video, 0, 0);
+      
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       
       return new Promise((resolve) => {
         canvas.toBlob((blob) => {
           if (blob) {
             const file = new File([blob], "camera-frame.jpg", { type: "image/jpeg" });
+            console.log("Camera frame captured successfully:", {
+              width: canvas.width,
+              height: canvas.height,
+              fileSize: file.size
+            });
             resolve(file);
           } else {
+            console.error("Failed to convert canvas to blob");
             resolve(null);
           }
         }, "image/jpeg", 0.95);
@@ -136,55 +198,47 @@ const LiveAvatarSessionComponent: React.FC<{
     }
   }, [isCameraActive]);
 
-  // Function to check if user question is about the camera
-  const isCameraRelatedQuestion = useCallback((text: string): boolean => {
-    const cameraKeywords = [
-      "camera",
-      "what can you see",
-      "what do you see",
-      "what are you seeing",
-      "describe what you see",
-      "explain what you see",
-      "tell me about",
-      "what's in",
-      "what is in",
-      "analyze",
-      "look at",
-      "see via camera",
-      "via camera",
-    ];
-    const lowerText = text.toLowerCase();
-    return cameraKeywords.some((keyword) => lowerText.includes(keyword));
-  }, []);
-
-  // Listen to user transcriptions and handle camera-related questions
+  // Listen to user transcriptions and handle all questions when camera is active
   useEffect(() => {
-    if (!sessionRef.current || !isCameraActive) {
+    if (!sessionRef.current) {
       return;
     }
 
     const handleUserTranscription = async (event: { text: string }) => {
       const userText = event.text;
+      console.log("User transcription received:", userText);
       
-      // Check if the question is about the camera
-      if (isCameraRelatedQuestion(userText) && !isProcessingCameraQuestion) {
+      // Only process if camera is active
+      if (!isCameraActive) {
+        return;
+      }
+      
+      // Process ALL questions when camera is active (not just camera-related ones)
+      if (!isProcessingCameraQuestion && userText.trim().length > 0) {
+        console.log("Processing question with camera frame analysis...");
         setIsProcessingCameraQuestion(true);
         setIsAnalyzingImage(true);
 
         try {
           // Capture frame from camera
+          console.log("Capturing camera frame...");
           const frameFile = await captureCameraFrame();
           
           if (!frameFile) {
             console.error("Failed to capture camera frame");
+            if (sessionRef.current && mode === "FULL") {
+              sessionRef.current.message("Hmm, I'm having trouble capturing what I'm seeing right now. Could you try asking again in a moment?");
+            }
             setIsProcessingCameraQuestion(false);
             setIsAnalyzingImage(false);
             return;
           }
 
-          // Send to analyze-image API
+          console.log("Frame captured, sending to API with question:", userText);
+          // Send to analyze-image API with the user's question
           const formData = new FormData();
           formData.append("image", frameFile);
+          formData.append("question", userText);
 
           const response = await fetch("/api/analyze-image", {
             method: "POST",
@@ -193,19 +247,21 @@ const LiveAvatarSessionComponent: React.FC<{
 
           if (!response.ok) {
             const error = await response.json();
+            console.error("API error:", error);
             throw new Error(error.error || "Failed to analyze camera frame");
           }
 
           const data = await response.json();
           const analysis = data.analysis;
+          console.log("Analysis received:", analysis.substring(0, 100) + "...");
           setImageAnalysis(analysis);
 
-          // Format the response as a conversational message for the avatar
-          // The analysis from GrokAI is already funny, gregarious, and happy
-          const responseMessage = `Oh wow! Let me tell you what I'm seeing through the camera! ${analysis} Pretty cool, right?`;
+          // The analysis from GrokAI already includes the answer to the question with funny, gregarious, and happy tone
+          const responseMessage = analysis;
 
           // Send the response to the avatar
           if (sessionRef.current && mode === "FULL") {
+            console.log("Sending response to avatar");
             sessionRef.current.message(responseMessage);
           }
         } catch (error) {
@@ -221,10 +277,12 @@ const LiveAvatarSessionComponent: React.FC<{
       }
     };
 
+    console.log("Setting up USER_TRANSCRIPTION listener, camera active:", isCameraActive);
     sessionRef.current.on(AgentEventsEnum.USER_TRANSCRIPTION, handleUserTranscription);
 
     return () => {
       if (sessionRef.current) {
+        console.log("Cleaning up USER_TRANSCRIPTION listener");
         // Use removeListener if off is not available
         if (typeof (sessionRef.current as any).off === 'function') {
           (sessionRef.current as any).off(AgentEventsEnum.USER_TRANSCRIPTION, handleUserTranscription);
@@ -233,7 +291,7 @@ const LiveAvatarSessionComponent: React.FC<{
         }
       }
     };
-  }, [sessionRef, isCameraActive, isProcessingCameraQuestion, mode, captureCameraFrame, isCameraRelatedQuestion]);
+  }, [sessionRef, isCameraActive, isProcessingCameraQuestion, mode, captureCameraFrame]);
 
   const handleCameraClick = async () => {
     if (isCameraActive) {
@@ -296,130 +354,12 @@ const LiveAvatarSessionComponent: React.FC<{
     setIsCameraActive(false);
   };
 
-  // Debug function to manually test camera frame capture and analysis
-  const handleDebugCameraAnalysis = async () => {
-    if (!isCameraActive) {
-      alert("Please activate the camera first!");
-      return;
-    }
-
-    setIsAnalyzingImage(true);
-
-    try {
-      // Capture frame from camera
-      const frameFile = await captureCameraFrame();
-      
-      if (!frameFile) {
-        console.error("Failed to capture camera frame");
-        alert("Failed to capture camera frame. Please try again.");
-        setIsAnalyzingImage(false);
-        return;
-      }
-
-      // Send to analyze-image API
-      const formData = new FormData();
-      formData.append("image", frameFile);
-
-      const response = await fetch("/api/analyze-image", {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Failed to analyze camera frame");
-      }
-
-      const data = await response.json();
-      const analysis = data.analysis;
-      setImageAnalysis(analysis);
-
-      // Format the response as a conversational message for the avatar
-      // The analysis from GrokAI is already funny, gregarious, and happy
-      const responseMessage = `Oh wow! Let me tell you what I'm seeing through the camera! ${analysis} Pretty cool, right?`;
-
-      // Send the response to the avatar
-      if (sessionRef.current && mode === "FULL") {
-        sessionRef.current.message(responseMessage);
-      } else {
-        alert(`Analysis complete!\n\n${analysis.substring(0, 200)}...`);
-      }
-    } catch (error) {
-      console.error("Error processing camera analysis:", error);
-      alert(`Error: ${error instanceof Error ? error.message : "Failed to analyze camera frame"}`);
-    } finally {
-      setIsAnalyzingImage(false);
-    }
-  };
-
-  // Function to extract frames from video
-  const extractVideoFrames = async (file: File): Promise<string[]> => {
-    return new Promise((resolve, reject) => {
-      const video = document.createElement("video");
-      const url = URL.createObjectURL(file);
-      video.src = url;
-      video.muted = true;
-
-      video.onloadedmetadata = () => {
-        const duration = video.duration;
-        const frameTimes = [
-          0,
-          duration / 2,
-          Math.max(0, duration - 0.1),
-        ].filter((time) => time >= 0 && time <= duration);
-
-        const frames: string[] = [];
-        const canvas = document.createElement("canvas");
-        const ctx = canvas.getContext("2d");
-
-        if (!ctx) {
-          URL.revokeObjectURL(url);
-          reject(new Error("Failed to create canvas context"));
-          return;
-        }
-
-        let processedFrames = 0;
-        const processFrame = (time: number) => {
-          return new Promise<void>((frameResolve) => {
-            video.currentTime = time;
-            video.onseeked = () => {
-              canvas.width = video.videoWidth;
-              canvas.height = video.videoHeight;
-              ctx.drawImage(video, 0, 0);
-              const base64 = canvas.toDataURL("image/jpeg", 0.95);
-              frames.push(base64.split(",")[1]); // Remove data:image/jpeg;base64, prefix
-              frameResolve();
-            };
-          });
-        };
-
-        const processAllFrames = async () => {
-          for (const time of frameTimes) {
-            await processFrame(time);
-          }
-          URL.revokeObjectURL(url);
-          resolve(frames);
-        };
-
-        processAllFrames().catch(reject);
-      };
-
-      video.onerror = () => {
-        URL.revokeObjectURL(url);
-        reject(new Error("Failed to load video"));
-      };
-    });
-  };
-
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const isImage = file.type.startsWith("image/");
-      const isVideo = file.type.startsWith("video/");
-
-      // Check if file is an image or video
-      if (!isImage && !isVideo) {
-        alert("Please upload an image or video file");
+      // Check if file is an image
+      if (!file.type.startsWith("image/")) {
+        alert("Please upload an image file");
         if (fileInputRef.current) {
           fileInputRef.current.value = "";
         }
@@ -428,60 +368,31 @@ const LiveAvatarSessionComponent: React.FC<{
 
       setIsAnalyzingImage(true);
       try {
-        if (isImage) {
-          // Handle image upload
-          const formData = new FormData();
-          formData.append("image", file);
+        const formData = new FormData();
+        formData.append("image", file);
 
-          const response = await fetch("/api/analyze-image", {
-            method: "POST",
-            body: formData,
-          });
+        const response = await fetch("/api/analyze-image", {
+          method: "POST",
+          body: formData,
+        });
 
-          if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error || "Failed to analyze image");
-          }
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || "Failed to analyze image");
+        }
 
-          const data = await response.json();
-          setImageAnalysis(data.analysis);
-          console.log("Image analyzed successfully");
-          
-          // For FULL mode, send the analysis as context to the AI
-          if (mode === "FULL" && sessionRef.current) {
-            const contextMessage = `[IMAGE CONTEXT] I have uploaded an image. Here is the detailed analysis: ${data.analysis}. Please remember this analysis and use it to answer any questions I ask about the image or related content.`;
-            sessionRef.current.message(contextMessage);
-          }
-        } else {
-          // Handle video upload - extract frames and send to server
-          const frames = await extractVideoFrames(file);
-          
-          const response = await fetch("/api/analyze-video", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ frames }),
-          });
-
-          if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error || "Failed to analyze video");
-          }
-
-          const data = await response.json();
-          setImageAnalysis(data.analysis);
-          console.log("Video analyzed successfully");
-          
-          // For FULL mode, send the analysis as context to the AI
-          if (mode === "FULL" && sessionRef.current) {
-            const contextMessage = `[VIDEO CONTEXT] I have uploaded a video. Here is the detailed analysis: ${data.analysis}. Please remember this analysis and use it to answer any questions I ask about the video or related content.`;
-            sessionRef.current.message(contextMessage);
-          }
+        const data = await response.json();
+        setImageAnalysis(data.analysis);
+        console.log("Image analyzed successfully");
+        
+        // For FULL mode, send the analysis as context to the AI
+        if (mode === "FULL" && sessionRef.current) {
+          const contextMessage = `[IMAGE CONTEXT] I have uploaded an image. Here is the detailed analysis: ${data.analysis}. Please remember this analysis and use it to answer any questions I ask about the image or related content.`;
+          sessionRef.current.message(contextMessage);
         }
       } catch (error) {
-        console.error(`Error analyzing ${isImage ? "image" : "video"}:`, error);
-        alert(`Failed to analyze ${isImage ? "image" : "video"}. Please try again.`);
+        console.error("Error analyzing image:", error);
+        alert("Failed to analyze image. Please try again.");
       } finally {
         setIsAnalyzingImage(false);
       }
@@ -538,12 +449,12 @@ const LiveAvatarSessionComponent: React.FC<{
         )}
         {isAnalyzingImage && (
           <div className="mt-4 bg-blue-500 text-white px-4 py-2 rounded-md max-w-2xl text-center">
-            <p className="font-semibold">🔄 Analyzing media...</p>
+            <p className="font-semibold">🔄 Analyzing image...</p>
           </div>
         )}
         {imageAnalysis && !isAnalyzingImage && (
           <div className="mt-4 bg-green-500 text-white px-4 py-2 rounded-md max-w-2xl text-center">
-            <p className="font-semibold">✅ Media analyzed successfully</p>
+            <p className="font-semibold">✅ Image analyzed successfully</p>
           </div>
         )}
       </div>
@@ -575,7 +486,7 @@ const LiveAvatarSessionComponent: React.FC<{
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/*,video/*"
+              accept="image/*"
               className="hidden"
               onChange={handleFileChange}
             />
@@ -596,18 +507,6 @@ const LiveAvatarSessionComponent: React.FC<{
               onClick={closeCameraPreview}
             >
               Close Camera
-            </button>
-            {/* Debug button - only visible in camera mode */}
-            <button
-              className="absolute top-4 left-4 bg-blue-600 text-white px-6 py-3 rounded-md z-40 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-              onClick={handleDebugCameraAnalysis}
-              disabled={isAnalyzingImage}
-            >
-              {isAnalyzingImage ? (
-                <>🔄 Analyzing...</>
-              ) : (
-                <>🔍 Debug: Analyze Camera</>
-              )}
             </button>
           </div>
         )}
