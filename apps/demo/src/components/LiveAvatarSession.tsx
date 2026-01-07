@@ -272,11 +272,11 @@ const LiveAvatarSessionComponent: React.FC<{
       
       if (!frameFile) {
         console.error("Failed to capture camera frame or no fallback image");
-        if (sessionRef.current && mode === "FULL") {
+        if (mode === "FULL") {
           if (cameraAvailable === false && !fallbackImage) {
-            sessionRef.current.message("I don't have a camera or image to analyze right now. Please upload an image first by clicking the Camera button and selecting an image!");
+            await repeat("I don't have a camera or image to analyze right now. Please upload an image first by clicking the Camera button and selecting an image!");
           } else {
-            sessionRef.current.message("Hmm, I'm having trouble capturing what I'm seeing right now. Could you try asking again in a moment?");
+            await repeat("Hmm, I'm having trouble capturing what I'm seeing right now. Could you try asking again in a moment?");
           }
         }
         setIsProcessingCameraQuestion(false);
@@ -329,9 +329,9 @@ const LiveAvatarSessionComponent: React.FC<{
       }, 5000);
     } catch (error) {
       console.error("Error processing camera question:", error);
-      // Send a friendly error message
-      if (sessionRef.current && mode === "FULL") {
-        sessionRef.current.message("Oops! I had a little trouble analyzing what I'm seeing right now. Could you try asking again?");
+      // Send a friendly error message - use repeat() to speak directly
+      if (mode === "FULL") {
+        await repeat("Oops! I had a little trouble analyzing what I'm seeing right now. Could you try asking again?");
       }
       // Reset after error
       processingTimeoutRef.current = setTimeout(() => {
@@ -515,56 +515,16 @@ const LiveAvatarSessionComponent: React.FC<{
     };
   }, [isCameraActive, cameraStream, fallbackImage, processCameraQuestion]);
 
-  // Function to create broken glass image
-  const createBrokenGlassImage = useCallback(async (): Promise<File> => {
-    // Create an SVG of broken glass
-    const svg = `
-      <svg width="800" height="600" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <linearGradient id="glassGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" style="stop-color:#e0e0e0;stop-opacity:0.3" />
-            <stop offset="50%" style="stop-color:#f0f0f0;stop-opacity:0.5" />
-            <stop offset="100%" style="stop-color:#d0d0d0;stop-opacity:0.3" />
-          </linearGradient>
-        </defs>
-        <!-- Background -->
-        <rect width="800" height="600" fill="#1a1a1a"/>
-        <!-- Glass pieces -->
-        <polygon points="100,50 250,80 220,200 80,180" fill="url(#glassGrad)" stroke="#888" stroke-width="2" opacity="0.7"/>
-        <polygon points="250,80 400,60 380,220 220,200" fill="url(#glassGrad)" stroke="#888" stroke-width="2" opacity="0.7"/>
-        <polygon points="400,60 550,90 520,250 380,220" fill="url(#glassGrad)" stroke="#888" stroke-width="2" opacity="0.7"/>
-        <polygon points="550,90 700,70 680,240 520,250" fill="url(#glassGrad)" stroke="#888" stroke-width="2" opacity="0.7"/>
-        <polygon points="80,180 220,200 200,350 60,330" fill="url(#glassGrad)" stroke="#888" stroke-width="2" opacity="0.7"/>
-        <polygon points="220,200 380,220 360,400 200,350" fill="url(#glassGrad)" stroke="#888" stroke-width="2" opacity="0.7"/>
-        <polygon points="380,220 520,250 500,420 360,400" fill="url(#glassGrad)" stroke="#888" stroke-width="2" opacity="0.7"/>
-        <polygon points="520,250 680,240 660,450 500,420" fill="url(#glassGrad)" stroke="#888" stroke-width="2" opacity="0.7"/>
-        <polygon points="60,330 200,350 180,500 40,480" fill="url(#glassGrad)" stroke="#888" stroke-width="2" opacity="0.7"/>
-        <polygon points="200,350 360,400 340,550 180,500" fill="url(#glassGrad)" stroke="#888" stroke-width="2" opacity="0.7"/>
-        <polygon points="360,400 500,420 480,570 340,550" fill="url(#glassGrad)" stroke="#888" stroke-width="2" opacity="0.7"/>
-        <polygon points="500,420 660,450 640,580 480,570" fill="url(#glassGrad)" stroke="#888" stroke-width="2" opacity="0.7"/>
-        <!-- Crack lines -->
-        <line x1="250" y1="80" x2="220" y2="200" stroke="#666" stroke-width="3" opacity="0.8"/>
-        <line x1="400" y1="60" x2="380" y2="220" stroke="#666" stroke-width="3" opacity="0.8"/>
-        <line x1="550" y1="90" x2="520" y2="250" stroke="#666" stroke-width="3" opacity="0.8"/>
-        <line x1="220" y1="200" x2="200" y2="350" stroke="#666" stroke-width="3" opacity="0.8"/>
-        <line x1="380" y1="220" x2="360" y2="400" stroke="#666" stroke-width="3" opacity="0.8"/>
-        <line x1="520" y1="250" x2="500" y2="420" stroke="#666" stroke-width="3" opacity="0.8"/>
-        <line x1="200" y1="350" x2="180" y2="500" stroke="#666" stroke-width="3" opacity="0.8"/>
-        <line x1="360" y1="400" x2="340" y2="550" stroke="#666" stroke-width="3" opacity="0.8"/>
-        <line x1="500" y1="420" x2="480" y2="570" stroke="#666" stroke-width="3" opacity="0.8"/>
-      </svg>
-    `;
-
-    // Convert SVG to blob, then to File
-    const svgBlob = new Blob([svg], { type: 'image/svg+xml' });
-    const url = URL.createObjectURL(svgBlob);
-    
+  // Function to load fallback image from public folder
+  const loadFallbackImage = useCallback(async (): Promise<File> => {
     return new Promise((resolve, reject) => {
       const img = new Image();
+      img.crossOrigin = 'anonymous';
+      
       img.onload = () => {
         const canvas = document.createElement('canvas');
-        canvas.width = 800;
-        canvas.height = 600;
+        canvas.width = img.width;
+        canvas.height = img.height;
         const ctx = canvas.getContext('2d');
         if (!ctx) {
           reject(new Error('Failed to get canvas context'));
@@ -572,20 +532,21 @@ const LiveAvatarSessionComponent: React.FC<{
         }
         ctx.drawImage(img, 0, 0);
         canvas.toBlob((blob) => {
-          URL.revokeObjectURL(url);
           if (blob) {
-            const file = new File([blob], 'broken-glass.png', { type: 'image/png' });
+            const file = new File([blob], '2c44c052-e58a-4f6d-a6c8-dba901ff0e9e.jpg', { type: 'image/jpeg' });
             resolve(file);
           } else {
             reject(new Error('Failed to convert canvas to blob'));
           }
-        }, 'image/png');
+        }, 'image/jpeg', 0.95);
       };
+      
       img.onerror = () => {
-        URL.revokeObjectURL(url);
-        reject(new Error('Failed to load SVG image'));
+        reject(new Error('Failed to load fallback image from public folder'));
       };
-      img.src = url;
+      
+      // Load image from public folder
+      img.src = '/2c44c052-e58a-4f6d-a6c8-dba901ff0e9e.jpg';
     });
   }, []);
 
@@ -597,33 +558,33 @@ const LiveAvatarSessionComponent: React.FC<{
         const hasVideoInput = devices.some(device => device.kind === 'videoinput');
         setCameraAvailable(hasVideoInput);
         
-        // If no camera available, create and set default broken glass image
+        // If no camera available, load and set default fallback image
         if (!hasVideoInput) {
           try {
-            const brokenGlassFile = await createBrokenGlassImage();
-            setFallbackImage(brokenGlassFile);
-            const previewUrl = URL.createObjectURL(brokenGlassFile);
+            const fallbackImageFile = await loadFallbackImage();
+            setFallbackImage(fallbackImageFile);
+            const previewUrl = URL.createObjectURL(fallbackImageFile);
             setFallbackImagePreview(previewUrl);
           } catch (error) {
-            console.error("Error creating broken glass image:", error);
+            console.error("Error loading fallback image:", error);
           }
         }
       } catch (error) {
         console.error("Error checking camera availability:", error);
         setCameraAvailable(false);
-        // Still try to create broken glass image
+        // Still try to load fallback image
         try {
-          const brokenGlassFile = await createBrokenGlassImage();
-          setFallbackImage(brokenGlassFile);
-          const previewUrl = URL.createObjectURL(brokenGlassFile);
+          const fallbackImageFile = await loadFallbackImage();
+          setFallbackImage(fallbackImageFile);
+          const previewUrl = URL.createObjectURL(fallbackImageFile);
           setFallbackImagePreview(previewUrl);
         } catch (err) {
-          console.error("Error creating broken glass image:", err);
+          console.error("Error loading fallback image:", err);
         }
       }
     };
     checkCameraAvailability();
-  }, [createBrokenGlassImage]);
+  }, [loadFallbackImage]);
 
   const handleCameraClick = async () => {
     if (isCameraActive) {
@@ -638,17 +599,17 @@ const LiveAvatarSessionComponent: React.FC<{
       return;
     }
 
-    // If camera is not available, show fallback mode with broken glass
+    // If camera is not available, show fallback mode with default image
     if (cameraAvailable === false) {
       setIsCameraActive(true);
-      // If broken glass image is not already set, create it
+      // If fallback image is not already set, load it
       if (!fallbackImage) {
-        createBrokenGlassImage().then((file) => {
+        loadFallbackImage().then((file) => {
           setFallbackImage(file);
           const previewUrl = URL.createObjectURL(file);
           setFallbackImagePreview(previewUrl);
         }).catch((error) => {
-          console.error("Error creating broken glass image:", error);
+          console.error("Error loading fallback image:", error);
         });
       }
       return;
@@ -671,18 +632,18 @@ const LiveAvatarSessionComponent: React.FC<{
           });
           setCameraAvailable(true);
         } catch (error2) {
-          // No camera available, use fallback mode with broken glass
+          // No camera available, use fallback mode with default image
           console.log("No camera available, using fallback mode");
           setCameraAvailable(false);
           setIsCameraActive(true);
-          // If broken glass image is not already set, create it
+          // If fallback image is not already set, load it
           if (!fallbackImage) {
-            createBrokenGlassImage().then((file) => {
+            loadFallbackImage().then((file) => {
               setFallbackImage(file);
               const previewUrl = URL.createObjectURL(file);
               setFallbackImagePreview(previewUrl);
             }).catch((error) => {
-              console.error("Error creating broken glass image:", error);
+              console.error("Error loading fallback image:", error);
             });
           }
           return;
@@ -750,8 +711,8 @@ const LiveAvatarSessionComponent: React.FC<{
       setCameraStream(null);
     }
     setIsCameraActive(false);
-    // Clean up preview URL if it's not the default broken glass
-    if (fallbackImagePreview && fallbackImage && fallbackImage.name !== 'broken-glass.png') {
+    // Clean up preview URL if it's not the default fallback image
+    if (fallbackImagePreview && fallbackImage && fallbackImage.name !== '2c44c052-e58a-4f6d-a6c8-dba901ff0e9e.jpg') {
       URL.revokeObjectURL(fallbackImagePreview);
     }
     setFallbackImage(null);
@@ -918,11 +879,11 @@ const LiveAvatarSessionComponent: React.FC<{
         {isCameraActive && (
           <div className="absolute inset-0 pt-24 flex items-center justify-center z-10">
             {cameraAvailable === false && fallbackImagePreview ? (
-              // Fallback image preview (broken glass by default)
+              // Fallback image preview (default image from public folder)
               <div className="relative w-full h-full max-w-4xl max-h-[calc(100vh-8rem)] flex flex-col">
                 <img
                   src={fallbackImagePreview}
-                  alt="Broken glass"
+                  alt="Fallback"
                   className="w-full h-full object-contain rounded-lg"
                 />
                 {/* <button
@@ -940,7 +901,7 @@ const LiveAvatarSessionComponent: React.FC<{
                 />
               </div>
             ) : cameraAvailable === false && !fallbackImagePreview ? (
-              // Loading broken glass image
+              // Loading fallback image
               <div className="flex flex-col items-center justify-center w-full h-full max-w-4xl max-h-[calc(100vh-8rem)] bg-gray-900 rounded-lg p-8">
                 <div className="text-center text-white">
                   <p className="text-lg">Loading...</p>
