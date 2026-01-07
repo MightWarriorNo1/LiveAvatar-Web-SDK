@@ -76,6 +76,7 @@ const LiveAvatarSessionComponent: React.FC<{
   const fallbackImageInputRef = useRef<HTMLInputElement>(null);
   const isDebugProcessingRef = useRef<boolean>(false);
   const lastAvatarResponseRef = useRef<string>("");
+  const hasAutoAnalyzedRef = useRef<boolean>(false);
 
   useEffect(() => {
     if (sessionState === SessionState.DISCONNECTED) {
@@ -232,9 +233,10 @@ const LiveAvatarSessionComponent: React.FC<{
 
     const userText = question.trim();
     
-    // Skip if empty
-    if (userText.length === 0) {
-      console.log("Question is empty, returning early");
+    // Allow empty question for general analysis (when camera mode is first activated)
+    // Skip only if we're not doing a general analysis (skipDuplicateCheck is false and question is empty)
+    if (userText.length === 0 && !skipDuplicateCheck) {
+      console.log("Question is empty and not a general analysis request, returning early");
       return;
     }
 
@@ -314,10 +316,11 @@ const LiveAvatarSessionComponent: React.FC<{
       // Store the response to filter out avatar transcriptions later
       lastAvatarResponseRef.current = responseMessage.substring(0, 100); // Store first 100 chars for comparison
 
-      // Send the response to the avatar
-      if (sessionRef.current && mode === "FULL") {
-        console.log("Sending response to avatar");
-        sessionRef.current.message(responseMessage);
+      // Send the response to the avatar - use repeat() to speak directly without AI processing
+      if (mode === "FULL") {
+        console.log("Sending response to avatar using repeat()");
+        // Use repeat() to make avatar speak the analysis directly without AI processing
+        await repeat(responseMessage);
       }
       
       // Reset the last processed question after a delay to allow the same question to be asked again later
@@ -338,7 +341,7 @@ const LiveAvatarSessionComponent: React.FC<{
       setIsProcessingCameraQuestion(false);
       setIsAnalyzingImage(false);
     }
-  }, [isCameraActive, isProcessingCameraQuestion, mode, captureCameraFrame, cameraAvailable, fallbackImage, sessionRef]);
+  }, [isCameraActive, isProcessingCameraQuestion, mode, captureCameraFrame, cameraAvailable, fallbackImage, sessionRef, repeat]);
 
   // Debug button handler
   const handleDebugAnalysis = useCallback(async () => {
@@ -452,6 +455,65 @@ const LiveAvatarSessionComponent: React.FC<{
       }
     };
   }, [sessionRef, isCameraActive, processCameraQuestion]);
+
+  // Automatically analyze and speak when camera mode is activated
+  useEffect(() => {
+    if (!isCameraActive) {
+      // Reset the flag when camera is deactivated
+      hasAutoAnalyzedRef.current = false;
+      return;
+    }
+
+    // Skip if we've already auto-analyzed for this activation
+    if (hasAutoAnalyzedRef.current) {
+      return;
+    }
+
+    // Wait a bit for camera stream or fallback image to be ready
+    const timeoutId = setTimeout(async () => {
+      // Check if we have either a camera stream or fallback image
+      const hasImage = fallbackImage !== null;
+      const hasCameraStream = cameraStream !== null && cameraPreviewRef.current;
+      
+      if (!hasImage && !hasCameraStream) {
+        console.log("Waiting for camera or fallback image to be ready...");
+        return;
+      }
+
+      // If camera stream, wait a bit more for video to be ready
+      if (hasCameraStream && cameraPreviewRef.current) {
+        const video = cameraPreviewRef.current;
+        if (video.readyState < 2 || video.videoWidth === 0) {
+          // Wait for video to be ready
+          const checkVideoReady = () => {
+            if (!isCameraActive || hasAutoAnalyzedRef.current) {
+              return; // Camera was turned off or already analyzed
+            }
+            if (video.readyState >= 2 && video.videoWidth > 0) {
+              console.log("Camera video is ready, triggering auto-analysis");
+              hasAutoAnalyzedRef.current = true;
+              // Use empty string for general analysis (no specific question)
+              processCameraQuestion("", true);
+            } else {
+              setTimeout(checkVideoReady, 200);
+            }
+          };
+          checkVideoReady();
+          return;
+        }
+      }
+
+      // Trigger automatic analysis without a question (just describe what it sees)
+      console.log("Camera mode activated, triggering automatic analysis");
+      hasAutoAnalyzedRef.current = true;
+      // Use empty string to trigger general analysis without a specific question
+      processCameraQuestion("", true);
+    }, 500); // Wait 500ms for setup
+
+    return () => {
+      clearTimeout(timeoutId);
+    };
+  }, [isCameraActive, cameraStream, fallbackImage, processCameraQuestion]);
 
   // Function to create broken glass image
   const createBrokenGlassImage = useCallback(async (): Promise<File> => {
@@ -827,7 +889,7 @@ const LiveAvatarSessionComponent: React.FC<{
           playsInline
           className={`${
             isCameraActive 
-              ? 'absolute top-24 left-4 w-48 h-48 object-contain z-20 rounded-lg border-2 border-white shadow-2xl' 
+              ? 'absolute top-24 left-4 w-24 h-44 object-contain z-20 rounded-lg border-2 border-white shadow-2xl' 
               : 'h-full w-full object-contain'
           }`}
         />
