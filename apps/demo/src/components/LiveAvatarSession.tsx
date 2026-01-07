@@ -68,8 +68,14 @@ const LiveAvatarSessionComponent: React.FC<{
   const [imageAnalysis, setImageAnalysis] = useState<string | null>(null);
   const [isAnalyzingImage, setIsAnalyzingImage] = useState(false);
   const [isProcessingCameraQuestion, setIsProcessingCameraQuestion] = useState(false);
+  const [cameraAvailable, setCameraAvailable] = useState<boolean | null>(null);
+  const [fallbackImage, setFallbackImage] = useState<File | null>(null);
+  const [fallbackImagePreview, setFallbackImagePreview] = useState<string | null>(null);
   const lastProcessedQuestionRef = useRef<string>("");
   const processingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const fallbackImageInputRef = useRef<HTMLInputElement>(null);
+  const isDebugProcessingRef = useRef<boolean>(false);
+  const lastAvatarResponseRef = useRef<string>("");
 
   useEffect(() => {
     if (sessionState === SessionState.DISCONNECTED) {
@@ -130,10 +136,21 @@ const LiveAvatarSessionComponent: React.FC<{
     }
   }, [cameraStream, isCameraActive]);
 
-  // Function to capture frame from camera video
+  // Function to capture frame from camera video or use fallback image
   const captureCameraFrame = useCallback(async (): Promise<File | null> => {
-    if (!cameraPreviewRef.current || !isCameraActive) {
-      console.error("Camera preview ref not available or camera not active");
+    if (!isCameraActive) {
+      return null;
+    }
+
+    // If using fallback image, return it directly
+    if (fallbackImage) {
+      console.log("Using fallback image:", fallbackImage.name);
+      return fallbackImage;
+    }
+
+    // Otherwise, try to capture from camera
+    if (!cameraPreviewRef.current) {
+      console.error("Camera preview ref not available");
       return null;
     }
 
@@ -202,7 +219,166 @@ const LiveAvatarSessionComponent: React.FC<{
       console.error("Error capturing camera frame:", error);
       return null;
     }
-  }, [isCameraActive]);
+  }, [isCameraActive, fallbackImage]);
+
+  // Function to process camera question (reusable for both voice and debug button)
+  const processCameraQuestion = useCallback(async (question: string, skipDuplicateCheck: boolean = false) => {
+    console.log("processCameraQuestion called", { question, skipDuplicateCheck, isCameraActive, isProcessingCameraQuestion });
+    
+    if (!isCameraActive) {
+      console.log("Camera not active, returning early");
+      return;
+    }
+
+    const userText = question.trim();
+    
+    // Skip if empty
+    if (userText.length === 0) {
+      console.log("Question is empty, returning early");
+      return;
+    }
+
+    // Skip if already processing (use ref for immediate check to prevent race conditions)
+    // Note: We allow processing if isDebugProcessingRef is set by the current call
+    // The check is done in handleDebugAnalysis before calling this function
+    if (isProcessingCameraQuestion) {
+      console.log("Already processing, skipping duplicate request");
+      return;
+    }
+
+    // Skip duplicate check if explicitly skipped (for debug button)
+    if (!skipDuplicateCheck && lastProcessedQuestionRef.current === userText) {
+      console.log("Skipping duplicate question:", userText);
+      return;
+    }
+    
+    // Clear any existing timeout
+    if (processingTimeoutRef.current) {
+      clearTimeout(processingTimeoutRef.current);
+    }
+    
+    // Mark as processing and store the question
+    console.log("Processing question with camera frame analysis...");
+    setIsProcessingCameraQuestion(true);
+    setIsAnalyzingImage(true);
+    lastProcessedQuestionRef.current = userText;
+
+    try {
+      // Capture frame from camera or use fallback image
+      console.log("Capturing camera frame or using fallback image...");
+      const frameFile = await captureCameraFrame();
+      
+      if (!frameFile) {
+        console.error("Failed to capture camera frame or no fallback image");
+        if (sessionRef.current && mode === "FULL") {
+          if (cameraAvailable === false && !fallbackImage) {
+            sessionRef.current.message("I don't have a camera or image to analyze right now. Please upload an image first by clicking the Camera button and selecting an image!");
+          } else {
+            sessionRef.current.message("Hmm, I'm having trouble capturing what I'm seeing right now. Could you try asking again in a moment?");
+          }
+        }
+        setIsProcessingCameraQuestion(false);
+        setIsAnalyzingImage(false);
+        // Reset after a delay to allow retry
+        processingTimeoutRef.current = setTimeout(() => {
+          lastProcessedQuestionRef.current = "";
+        }, 2000);
+        return;
+      }
+
+      console.log("Frame captured, sending to API with question:", userText);
+      // Send to analyze-image API with the user's question
+      const formData = new FormData();
+      formData.append("image", frameFile);
+      formData.append("question", userText);
+
+      const response = await fetch("/api/analyze-image", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        console.error("API error:", error);
+        throw new Error(error.error || "Failed to analyze camera frame");
+      }
+
+      const data = await response.json();
+      const analysis = data.analysis;
+      console.log("Analysis received:", analysis.substring(0, 100) + "...");
+      setImageAnalysis(analysis);
+
+      // The analysis from GrokAI already includes the answer to the question with funny, gregarious, and happy tone
+      const responseMessage = analysis;
+
+      // Store the response to filter out avatar transcriptions later
+      lastAvatarResponseRef.current = responseMessage.substring(0, 100); // Store first 100 chars for comparison
+
+      // Send the response to the avatar
+      if (sessionRef.current && mode === "FULL") {
+        console.log("Sending response to avatar");
+        sessionRef.current.message(responseMessage);
+      }
+      
+      // Reset the last processed question after a delay to allow the same question to be asked again later
+      processingTimeoutRef.current = setTimeout(() => {
+        lastProcessedQuestionRef.current = "";
+      }, 5000);
+    } catch (error) {
+      console.error("Error processing camera question:", error);
+      // Send a friendly error message
+      if (sessionRef.current && mode === "FULL") {
+        sessionRef.current.message("Oops! I had a little trouble analyzing what I'm seeing right now. Could you try asking again?");
+      }
+      // Reset after error
+      processingTimeoutRef.current = setTimeout(() => {
+        lastProcessedQuestionRef.current = "";
+      }, 2000);
+    } finally {
+      setIsProcessingCameraQuestion(false);
+      setIsAnalyzingImage(false);
+    }
+  }, [isCameraActive, isProcessingCameraQuestion, mode, captureCameraFrame, cameraAvailable, fallbackImage, sessionRef]);
+
+  // Debug button handler
+  const handleDebugAnalysis = useCallback(async () => {
+    console.log("Debug button clicked", {
+      isDebugProcessing: isDebugProcessingRef.current,
+      isProcessingCameraQuestion,
+      isCameraActive,
+      hasFallbackImage: !!fallbackImage,
+      cameraAvailable
+    });
+
+    // Prevent multiple simultaneous calls
+    if (isDebugProcessingRef.current || isProcessingCameraQuestion) {
+      console.log("Debug analysis already in progress, skipping...");
+      return;
+    }
+
+    if (!isCameraActive) {
+      console.error("Camera is not active, cannot analyze");
+      return;
+    }
+
+    isDebugProcessingRef.current = true;
+    const defaultQuestion = "What can you see in this image? Please describe everything you see with enthusiasm and humor!";
+    
+    console.log("Starting debug analysis with question:", defaultQuestion);
+    
+    try {
+      await processCameraQuestion(defaultQuestion, true);
+      console.log("Debug analysis completed successfully");
+    } catch (error) {
+      console.error("Error in debug analysis:", error);
+    } finally {
+      // Reset after processing completes
+      setTimeout(() => {
+        isDebugProcessingRef.current = false;
+        console.log("Debug processing ref reset");
+      }, 500);
+    }
+  }, [processCameraQuestion, isProcessingCameraQuestion, isCameraActive, fallbackImage, cameraAvailable]);
 
   // Listen to user transcriptions and handle all questions when camera is active
   useEffect(() => {
@@ -214,104 +390,48 @@ const LiveAvatarSessionComponent: React.FC<{
       const userText = event.text.trim();
       console.log("User transcription received:", userText);
       
-      // Only process if camera is active
-      if (!isCameraActive) {
-        return;
-      }
-      
-      // Skip if empty, already processing, or same question as last processed
-      if (
-        userText.length === 0 ||
-        isProcessingCameraQuestion ||
-        lastProcessedQuestionRef.current === userText
-      ) {
-        console.log("Skipping transcription:", {
-          empty: userText.length === 0,
-          processing: isProcessingCameraQuestion,
-          duplicate: lastProcessedQuestionRef.current === userText
-        });
-        return;
-      }
-      
-      // Clear any existing timeout
-      if (processingTimeoutRef.current) {
-        clearTimeout(processingTimeoutRef.current);
-      }
-      
-      // Mark as processing and store the question
-      console.log("Processing question with camera frame analysis...");
-      setIsProcessingCameraQuestion(true);
-      setIsAnalyzingImage(true);
-      lastProcessedQuestionRef.current = userText;
-
-      try {
-        // Capture frame from camera
-        console.log("Capturing camera frame...");
-        const frameFile = await captureCameraFrame();
+      // Skip if this transcription matches our recent avatar response (avatar's speech being transcribed)
+      // This prevents infinite loops where avatar's response triggers another analysis
+      if (lastAvatarResponseRef.current && userText.length > 30) {
+        const responseStart = lastAvatarResponseRef.current.toLowerCase().trim();
+        const transcriptionStart = userText.substring(0, Math.min(150, userText.length)).toLowerCase().trim();
         
-        if (!frameFile) {
-          console.error("Failed to capture camera frame");
-          if (sessionRef.current && mode === "FULL") {
-            sessionRef.current.message("Hmm, I'm having trouble capturing what I'm seeing right now. Could you try asking again in a moment?");
+        // Check if transcription matches our response (avatar speaking our response)
+        // Compare first 50-100 characters for similarity
+        const responsePrefix = responseStart.substring(0, 80);
+        const transcriptionPrefix = transcriptionStart.substring(0, 80);
+        
+        // If they're very similar (80% match), it's likely the avatar's response
+        if (responsePrefix.length > 30 && transcriptionPrefix.length > 30) {
+          let matchCount = 0;
+          const minLength = Math.min(responsePrefix.length, transcriptionPrefix.length);
+          for (let i = 0; i < minLength; i++) {
+            if (responsePrefix[i] === transcriptionPrefix[i]) {
+              matchCount++;
+            }
           }
-          setIsProcessingCameraQuestion(false);
-          setIsAnalyzingImage(false);
-          // Reset after a delay to allow retry
-          processingTimeoutRef.current = setTimeout(() => {
-            lastProcessedQuestionRef.current = "";
-          }, 2000);
-          return;
+          const similarity = matchCount / minLength;
+          
+          if (similarity > 0.7) {
+            console.log("Skipping transcription - appears to be avatar's response being transcribed", {
+              similarity,
+              responsePrefix: responsePrefix.substring(0, 50),
+              transcriptionPrefix: transcriptionPrefix.substring(0, 50)
+            });
+            return;
+          }
         }
-
-        console.log("Frame captured, sending to API with question:", userText);
-        // Send to analyze-image API with the user's question
-        const formData = new FormData();
-        formData.append("image", frameFile);
-        formData.append("question", userText);
-
-        const response = await fetch("/api/analyze-image", {
-          method: "POST",
-          body: formData,
-        });
-
-        if (!response.ok) {
-          const error = await response.json();
-          console.error("API error:", error);
-          throw new Error(error.error || "Failed to analyze camera frame");
-        }
-
-        const data = await response.json();
-        const analysis = data.analysis;
-        console.log("Analysis received:", analysis.substring(0, 100) + "...");
-        setImageAnalysis(analysis);
-
-        // The analysis from GrokAI already includes the answer to the question with funny, gregarious, and happy tone
-        const responseMessage = analysis;
-
-        // Send the response to the avatar
-        if (sessionRef.current && mode === "FULL") {
-          console.log("Sending response to avatar");
-          sessionRef.current.message(responseMessage);
-        }
-        
-        // Reset the last processed question after a delay to allow the same question to be asked again later
-        processingTimeoutRef.current = setTimeout(() => {
-          lastProcessedQuestionRef.current = "";
-        }, 5000);
-      } catch (error) {
-        console.error("Error processing camera question:", error);
-        // Send a friendly error message
-        if (sessionRef.current && mode === "FULL") {
-          sessionRef.current.message("Oops! I had a little trouble analyzing what I'm seeing right now. Could you try asking again?");
-        }
-        // Reset after error
-        processingTimeoutRef.current = setTimeout(() => {
-          lastProcessedQuestionRef.current = "";
-        }, 2000);
-      } finally {
-        setIsProcessingCameraQuestion(false);
-        setIsAnalyzingImage(false);
       }
+      
+      // Also skip if transcription is very long (likely avatar response, not user question)
+      // User questions are typically shorter, avatar responses are longer
+      if (userText.length > 200) {
+        console.log("Skipping transcription - too long, likely avatar response");
+        return;
+      }
+      
+      // Process the question using the reusable function
+      await processCameraQuestion(userText, false);
     };
 
     console.log("Setting up USER_TRANSCRIPTION listener, camera active:", isCameraActive);
@@ -331,7 +451,117 @@ const LiveAvatarSessionComponent: React.FC<{
         }
       }
     };
-  }, [sessionRef, isCameraActive, isProcessingCameraQuestion, mode, captureCameraFrame]);
+  }, [sessionRef, isCameraActive, processCameraQuestion]);
+
+  // Function to create broken glass image
+  const createBrokenGlassImage = useCallback(async (): Promise<File> => {
+    // Create an SVG of broken glass
+    const svg = `
+      <svg width="800" height="600" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="glassGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#e0e0e0;stop-opacity:0.3" />
+            <stop offset="50%" style="stop-color:#f0f0f0;stop-opacity:0.5" />
+            <stop offset="100%" style="stop-color:#d0d0d0;stop-opacity:0.3" />
+          </linearGradient>
+        </defs>
+        <!-- Background -->
+        <rect width="800" height="600" fill="#1a1a1a"/>
+        <!-- Glass pieces -->
+        <polygon points="100,50 250,80 220,200 80,180" fill="url(#glassGrad)" stroke="#888" stroke-width="2" opacity="0.7"/>
+        <polygon points="250,80 400,60 380,220 220,200" fill="url(#glassGrad)" stroke="#888" stroke-width="2" opacity="0.7"/>
+        <polygon points="400,60 550,90 520,250 380,220" fill="url(#glassGrad)" stroke="#888" stroke-width="2" opacity="0.7"/>
+        <polygon points="550,90 700,70 680,240 520,250" fill="url(#glassGrad)" stroke="#888" stroke-width="2" opacity="0.7"/>
+        <polygon points="80,180 220,200 200,350 60,330" fill="url(#glassGrad)" stroke="#888" stroke-width="2" opacity="0.7"/>
+        <polygon points="220,200 380,220 360,400 200,350" fill="url(#glassGrad)" stroke="#888" stroke-width="2" opacity="0.7"/>
+        <polygon points="380,220 520,250 500,420 360,400" fill="url(#glassGrad)" stroke="#888" stroke-width="2" opacity="0.7"/>
+        <polygon points="520,250 680,240 660,450 500,420" fill="url(#glassGrad)" stroke="#888" stroke-width="2" opacity="0.7"/>
+        <polygon points="60,330 200,350 180,500 40,480" fill="url(#glassGrad)" stroke="#888" stroke-width="2" opacity="0.7"/>
+        <polygon points="200,350 360,400 340,550 180,500" fill="url(#glassGrad)" stroke="#888" stroke-width="2" opacity="0.7"/>
+        <polygon points="360,400 500,420 480,570 340,550" fill="url(#glassGrad)" stroke="#888" stroke-width="2" opacity="0.7"/>
+        <polygon points="500,420 660,450 640,580 480,570" fill="url(#glassGrad)" stroke="#888" stroke-width="2" opacity="0.7"/>
+        <!-- Crack lines -->
+        <line x1="250" y1="80" x2="220" y2="200" stroke="#666" stroke-width="3" opacity="0.8"/>
+        <line x1="400" y1="60" x2="380" y2="220" stroke="#666" stroke-width="3" opacity="0.8"/>
+        <line x1="550" y1="90" x2="520" y2="250" stroke="#666" stroke-width="3" opacity="0.8"/>
+        <line x1="220" y1="200" x2="200" y2="350" stroke="#666" stroke-width="3" opacity="0.8"/>
+        <line x1="380" y1="220" x2="360" y2="400" stroke="#666" stroke-width="3" opacity="0.8"/>
+        <line x1="520" y1="250" x2="500" y2="420" stroke="#666" stroke-width="3" opacity="0.8"/>
+        <line x1="200" y1="350" x2="180" y2="500" stroke="#666" stroke-width="3" opacity="0.8"/>
+        <line x1="360" y1="400" x2="340" y2="550" stroke="#666" stroke-width="3" opacity="0.8"/>
+        <line x1="500" y1="420" x2="480" y2="570" stroke="#666" stroke-width="3" opacity="0.8"/>
+      </svg>
+    `;
+
+    // Convert SVG to blob, then to File
+    const svgBlob = new Blob([svg], { type: 'image/svg+xml' });
+    const url = URL.createObjectURL(svgBlob);
+    
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = 800;
+        canvas.height = 600;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          reject(new Error('Failed to get canvas context'));
+          return;
+        }
+        ctx.drawImage(img, 0, 0);
+        canvas.toBlob((blob) => {
+          URL.revokeObjectURL(url);
+          if (blob) {
+            const file = new File([blob], 'broken-glass.png', { type: 'image/png' });
+            resolve(file);
+          } else {
+            reject(new Error('Failed to convert canvas to blob'));
+          }
+        }, 'image/png');
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        reject(new Error('Failed to load SVG image'));
+      };
+      img.src = url;
+    });
+  }, []);
+
+  // Check camera availability on mount and set default broken glass image
+  useEffect(() => {
+    const checkCameraAvailability = async () => {
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const hasVideoInput = devices.some(device => device.kind === 'videoinput');
+        setCameraAvailable(hasVideoInput);
+        
+        // If no camera available, create and set default broken glass image
+        if (!hasVideoInput) {
+          try {
+            const brokenGlassFile = await createBrokenGlassImage();
+            setFallbackImage(brokenGlassFile);
+            const previewUrl = URL.createObjectURL(brokenGlassFile);
+            setFallbackImagePreview(previewUrl);
+          } catch (error) {
+            console.error("Error creating broken glass image:", error);
+          }
+        }
+      } catch (error) {
+        console.error("Error checking camera availability:", error);
+        setCameraAvailable(false);
+        // Still try to create broken glass image
+        try {
+          const brokenGlassFile = await createBrokenGlassImage();
+          setFallbackImage(brokenGlassFile);
+          const previewUrl = URL.createObjectURL(brokenGlassFile);
+          setFallbackImagePreview(previewUrl);
+        } catch (err) {
+          console.error("Error creating broken glass image:", err);
+        }
+      }
+    };
+    checkCameraAvailability();
+  }, [createBrokenGlassImage]);
 
   const handleCameraClick = async () => {
     if (isCameraActive) {
@@ -341,6 +571,24 @@ const LiveAvatarSessionComponent: React.FC<{
         setCameraStream(null);
       }
       setIsCameraActive(false);
+      setFallbackImage(null);
+      setFallbackImagePreview(null);
+      return;
+    }
+
+    // If camera is not available, show fallback mode with broken glass
+    if (cameraAvailable === false) {
+      setIsCameraActive(true);
+      // If broken glass image is not already set, create it
+      if (!fallbackImage) {
+        createBrokenGlassImage().then((file) => {
+          setFallbackImage(file);
+          const previewUrl = URL.createObjectURL(file);
+          setFallbackImagePreview(previewUrl);
+        }).catch((error) => {
+          console.error("Error creating broken glass image:", error);
+        });
+      }
       return;
     }
 
@@ -351,12 +599,32 @@ const LiveAvatarSessionComponent: React.FC<{
         stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: "environment" },
         });
+        setCameraAvailable(true);
       } catch (error) {
         // If rear camera fails, try front camera (user)
         console.log("Rear camera not available, trying front camera");
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "user" },
-        });
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: "user" },
+          });
+          setCameraAvailable(true);
+        } catch (error2) {
+          // No camera available, use fallback mode with broken glass
+          console.log("No camera available, using fallback mode");
+          setCameraAvailable(false);
+          setIsCameraActive(true);
+          // If broken glass image is not already set, create it
+          if (!fallbackImage) {
+            createBrokenGlassImage().then((file) => {
+              setFallbackImage(file);
+              const previewUrl = URL.createObjectURL(file);
+              setFallbackImagePreview(previewUrl);
+            }).catch((error) => {
+              console.error("Error creating broken glass image:", error);
+            });
+          }
+          return;
+        }
       }
 
       if (stream) {
@@ -365,7 +633,35 @@ const LiveAvatarSessionComponent: React.FC<{
       }
     } catch (error) {
       console.error("Error accessing camera:", error);
-      alert("Unable to access camera. Please check permissions.");
+      // Use fallback mode instead of showing error
+      setCameraAvailable(false);
+      setIsCameraActive(true);
+      fallbackImageInputRef.current?.click();
+    }
+  };
+
+  const handleFallbackImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (!file.type.startsWith("image/")) {
+        alert("Please upload an image file");
+        if (fallbackImageInputRef.current) {
+          fallbackImageInputRef.current.value = "";
+        }
+        return;
+      }
+      // Clean up previous preview URL if it exists
+      if (fallbackImagePreview) {
+        URL.revokeObjectURL(fallbackImagePreview);
+      }
+      setFallbackImage(file);
+      // Create preview URL
+      const previewUrl = URL.createObjectURL(file);
+      setFallbackImagePreview(previewUrl);
+    }
+    // Reset input
+    if (fallbackImageInputRef.current) {
+      fallbackImageInputRef.current.value = "";
     }
   };
 
@@ -392,6 +688,12 @@ const LiveAvatarSessionComponent: React.FC<{
       setCameraStream(null);
     }
     setIsCameraActive(false);
+    // Clean up preview URL if it's not the default broken glass
+    if (fallbackImagePreview && fallbackImage && fallbackImage.name !== 'broken-glass.png') {
+      URL.revokeObjectURL(fallbackImagePreview);
+    }
+    setFallbackImage(null);
+    setFallbackImagePreview(null);
     // Reset processing state when camera is closed
     setIsProcessingCameraQuestion(false);
     setIsAnalyzingImage(false);
@@ -401,6 +703,15 @@ const LiveAvatarSessionComponent: React.FC<{
       processingTimeoutRef.current = null;
     }
   };
+
+  // Cleanup object URLs on unmount
+  useEffect(() => {
+    return () => {
+      if (fallbackImagePreview) {
+        URL.revokeObjectURL(fallbackImagePreview);
+      }
+    };
+  }, [fallbackImagePreview]);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -495,7 +806,7 @@ const LiveAvatarSessionComponent: React.FC<{
             <p className="font-semibold">⚠️ Warning: {microphoneWarning}</p>
           </div>
         )}
-        {isAnalyzingImage && (
+        {/* {isAnalyzingImage && (
           <div className="mt-4 bg-blue-500 text-white px-4 py-2 rounded-md max-w-2xl text-center">
             <p className="font-semibold">🔄 Analyzing image...</p>
           </div>
@@ -504,7 +815,7 @@ const LiveAvatarSessionComponent: React.FC<{
           <div className="mt-4 bg-green-500 text-white px-4 py-2 rounded-md max-w-2xl text-center">
             <p className="font-semibold">✅ Image analyzed successfully</p>
           </div>
-        )}
+        )} */}
       </div>
 
       {/* Full screen video */}
@@ -516,7 +827,7 @@ const LiveAvatarSessionComponent: React.FC<{
           playsInline
           className={`${
             isCameraActive 
-              ? 'absolute top-24 left-4 w-64 h-48 object-contain z-20 rounded-lg border-2 border-white shadow-2xl' 
+              ? 'absolute top-24 left-4 w-48 h-48 object-contain z-20 rounded-lg border-2 border-white shadow-2xl' 
               : 'h-full w-full object-contain'
           }`}
         />
@@ -544,18 +855,66 @@ const LiveAvatarSessionComponent: React.FC<{
         {/* Camera Preview - full screen under header when active */}
         {isCameraActive && (
           <div className="absolute inset-0 pt-24 flex items-center justify-center z-10">
-            <video
-              ref={cameraPreviewRef}
-              autoPlay
-              playsInline
-              className="max-h-[calc(100vh-6rem)] w-full object-contain"
-            />
-            <button
-              className="absolute top-4 right-4 bg-red-600 text-white px-6 py-3 rounded-md z-40 hover:bg-red-700"
-              onClick={closeCameraPreview}
-            >
-              Close Camera
-            </button>
+            {cameraAvailable === false && fallbackImagePreview ? (
+              // Fallback image preview (broken glass by default)
+              <div className="relative w-full h-full max-w-4xl max-h-[calc(100vh-8rem)] flex flex-col">
+                <img
+                  src={fallbackImagePreview}
+                  alt="Broken glass"
+                  className="w-full h-full object-contain rounded-lg"
+                />
+                {/* <button
+                  onClick={() => fallbackImageInputRef.current?.click()}
+                  className="absolute top-4 right-4 bg-blue-600 text-white px-4 py-2 rounded-md z-40 hover:bg-blue-700 text-sm"
+                >
+                  Change Image
+                </button> */}
+                <input
+                  ref={fallbackImageInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleFallbackImageChange}
+                />
+              </div>
+            ) : cameraAvailable === false && !fallbackImagePreview ? (
+              // Loading broken glass image
+              <div className="flex flex-col items-center justify-center w-full h-full max-w-4xl max-h-[calc(100vh-8rem)] bg-gray-900 rounded-lg p-8">
+                <div className="text-center text-white">
+                  <p className="text-lg">Loading...</p>
+                </div>
+              </div>
+            ) : fallbackImagePreview ? (
+              // User uploaded image preview
+              <div className="relative w-full h-full max-w-4xl max-h-[calc(100vh-8rem)] flex flex-col">
+                <img
+                  src={fallbackImagePreview}
+                  alt="Uploaded preview"
+                  className="w-full h-full object-contain rounded-lg"
+                />
+                <button
+                  onClick={() => fallbackImageInputRef.current?.click()}
+                  className="absolute top-4 right-4 bg-blue-600 text-white px-4 py-2 rounded-md z-40 hover:bg-blue-700 text-sm"
+                >
+                  Change Image
+                </button>
+                <input
+                  ref={fallbackImageInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleFallbackImageChange}
+                />
+              </div>
+            ) : (
+              // Camera video preview
+              <video
+                ref={cameraPreviewRef}
+                autoPlay
+                playsInline
+                className="max-h-[calc(100vh-6rem)] w-full object-contain"
+              />
+            )}
           </div>
         )}
       </div>
@@ -575,6 +934,34 @@ const LiveAvatarSessionComponent: React.FC<{
           >
             📁 Upload
           </button>
+          {/* Debug button - only visible in camera mode */}
+          {/* {isCameraActive && (
+            <button
+              className="fixed bottom-20 left-1/2 bg-purple-600 text-white px-6 py-3 rounded-md z-20 transform -translate-x-1/2 flex items-center justify-center gap-2 hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log("Debug button onClick triggered", {
+                  isProcessingCameraQuestion,
+                  isAnalyzingImage,
+                  isDebugProcessing: isDebugProcessingRef.current,
+                  isCameraActive,
+                  hasFallbackImage: !!fallbackImage
+                });
+                // Always call the handler - it will check internally if it should proceed
+                handleDebugAnalysis().catch((error) => {
+                  console.error("Error in handleDebugAnalysis:", error);
+                });
+              }}
+              disabled={isProcessingCameraQuestion || isAnalyzingImage || isDebugProcessingRef.current}
+            >
+              {isAnalyzingImage || isDebugProcessingRef.current ? (
+                <>🔄 Analyzing...</>
+              ) : (
+                <>🔍 Debug: Analyze Image</>
+              )}
+            </button>
+          )} */}
         </>
       )}
       <button
