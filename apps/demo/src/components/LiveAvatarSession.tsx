@@ -10,7 +10,9 @@ import {
 } from "../liveavatar";
 import { SessionState, AgentEventsEnum } from "@heygen/liveavatar-web-sdk";
 import { useAvatarActions } from "../liveavatar/useAvatarActions";
+import { Radio, Camera, Image as ImageIcon, Video } from "lucide-react";
 
+// Then in your buttons:
 const Button: React.FC<{
   onClick: () => void;
   disabled?: boolean;
@@ -77,6 +79,8 @@ const LiveAvatarSessionComponent: React.FC<{
   const isDebugProcessingRef = useRef<boolean>(false);
   const lastAvatarResponseRef = useRef<string>("");
   const hasAutoAnalyzedRef = useRef<boolean>(false);
+
+  const [uploadType, setUploadType] = useState<string>('image');
 
   useEffect(() => {
     if (sessionState === SessionState.DISCONNECTED) {
@@ -688,7 +692,9 @@ const LiveAvatarSessionComponent: React.FC<{
     }
   };
 
-  const handleFileUploadClick = () => {
+  const handleFileUploadClick = (value: string) => {
+    setUploadType(value);
+    fileInputRef.current?.setAttribute('accept', `${value}/*`);
     fileInputRef.current?.click();
   };
 
@@ -868,7 +874,7 @@ const LiveAvatarSessionComponent: React.FC<{
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/*"
+              accept={`${uploadType}/*`}
               className="hidden"
               onChange={handleFileChange}
             />
@@ -945,7 +951,7 @@ const LiveAvatarSessionComponent: React.FC<{
       {/* Fixed buttons at bottom - positioned relative to viewport */}
       {mode === "FULL" && (
         <>
-          <button
+          {/* <button
             className="fixed bottom-20 left-1/4 bg-white text-black px-6 py-3 rounded-md z-20 transform -translate-x-1/2 flex items-center justify-center gap-2"
             onClick={handleCameraClick}
           >
@@ -956,7 +962,8 @@ const LiveAvatarSessionComponent: React.FC<{
             onClick={handleFileUploadClick}
           >
             📁 Upload
-          </button>
+          </button> */}
+
           {/* Debug button - only visible in camera mode */}
           {/* {isCameraActive && (
             <button
@@ -985,10 +992,29 @@ const LiveAvatarSessionComponent: React.FC<{
               )}
             </button>
           )} */}
+
+          {/* ss added */}
+          <div className="fixed bottom-[4rem] bg-[#00000057] ml-[0.5rem] w-full max-w-sm text-white rounded-lg shadow-lg p-4">
+            <div className="grid grid-cols-2 gap-4">
+              <button className="bg-gray-800 p-3 rounded-lg flex items-center justify-center text-sm font-medium text-custom-green">
+                <Radio className="mr-2 w-4 h-4" /> Go Live
+              </button>
+              <button className="bg-gray-800 p-3 rounded-lg flex items-center justify-center text-sm font-medium text-custom-green" onClick={handleCameraClick}>
+                <Camera className="mr-2 w-4 h-4" /> Camera
+              </button>
+              <button className="bg-gray-800 p-3 rounded-lg flex items-center justify-center text-sm font-medium text-custom-green" onClick={() => {handleFileUploadClick('image')}}>
+                <ImageIcon className="mr-2 w-4 h-4" /> Gallery
+              </button>
+              <button className="bg-gray-800 p-3 rounded-lg flex items-center justify-center text-sm font-medium text-custom-green" onClick={() => {handleFileUploadClick('video')}}>
+                <Video className="mr-2 w-4 h-4" />Video
+              </button>
+            </div>
+          </div>
         </>
       )}
+      
       <button
-        className="fixed bottom-4 right-4 bg-white text-black px-4 py-2 rounded-md z-20"
+        className="fixed bottom-4 w-[11rem] ml-[7rem] bg-white text-black px-4 py-2 rounded-md z-20"
         onClick={() => stopSession()}
       >
         Stop
