@@ -81,18 +81,63 @@ const LiveAvatarSessionComponent: React.FC<{
   const hasAutoAnalyzedRef = useRef<boolean>(false);
 
   const [uploadType, setUploadType] = useState<string>('image');
+  const isAttachedRef = useRef<boolean>(false);
+  const greetingTriggeredRef = useRef<boolean>(false);
 
   useEffect(() => {
     if (sessionState === SessionState.DISCONNECTED) {
       onSessionStopped();
+      // Reset greeting trigger when session disconnects
+      greetingTriggeredRef.current = false;
     }
   }, [sessionState, onSessionStopped]);
 
   useEffect(() => {
+    // console.log("isStreamReady: ", isStreamReady);
+    // console.log("videoRef.current: ", videoRef.current);
     if (isStreamReady && videoRef.current) {
       attachElement(videoRef.current);
+      // console.log("attached element");
+      
+      // Trigger greeting after video is ready (only in FULL mode and only once)
+      if (mode === "FULL" && !greetingTriggeredRef.current && sessionRef.current) {
+        greetingTriggeredRef.current = true;
+        
+        // Wait a moment for video to render, then trigger greeting
+        const timer = setTimeout(() => {
+          if (sessionRef.current) {
+            // Send trigger message to start greeting
+            sessionRef.current.message("Please greet the user now");
+          }
+        }, 1000); // 1 second delay after video is ready
+        
+        // Cleanup timeout on unmount or if dependencies change
+        return () => {
+          clearTimeout(timer);
+        };
+      }
     }
-  }, [attachElement, isStreamReady]);
+  }, [attachElement, isStreamReady, mode, sessionRef]);
+
+
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
 
   useEffect(() => {
     if (sessionState === SessionState.INACTIVE) {
@@ -590,6 +635,8 @@ const LiveAvatarSessionComponent: React.FC<{
     checkCameraAvailability();
   }, [loadFallbackImage]);
 
+
+  
   const handleCameraClick = async () => {
     if (isCameraActive) {
       // Stop camera if already active
@@ -600,6 +647,9 @@ const LiveAvatarSessionComponent: React.FC<{
       setIsCameraActive(false);
       setFallbackImage(null);
       setFallbackImagePreview(null);
+      
+      // CRITICAL: Don't pause or mute the video element
+      // Audio should continue playing
       return;
     }
 
@@ -666,6 +716,7 @@ const LiveAvatarSessionComponent: React.FC<{
       fallbackImageInputRef.current?.click();
     }
   };
+
 
   const handleFallbackImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -852,8 +903,10 @@ const LiveAvatarSessionComponent: React.FC<{
         {/* Avatar video - full screen when camera inactive, small overlay in left corner when camera active */}
         <video
           ref={videoRef}
-          autoPlay
+          autoPlay  // Native autoplay
           playsInline
+          preload="auto"
+          muted={false}
           className={`${
             isCameraActive 
               ? 'absolute top-24 left-4 w-24 h-44 object-contain z-20 rounded-lg border-2 border-white shadow-2xl' 
@@ -994,18 +1047,18 @@ const LiveAvatarSessionComponent: React.FC<{
           )} */}
 
           {/* ss added */}
-          <div className="fixed bottom-[4rem] bg-[#00000057] ml-[0.5rem] w-full max-w-sm text-white rounded-lg shadow-lg p-4">
-            <div className="grid grid-cols-2 gap-4">
-              <button className="bg-gray-800 p-3 rounded-lg flex items-center justify-center text-sm font-medium text-custom-green">
+          <div className="fixed bottom-[4rem] left-1/2 -translate-x-1/2 bg-[#00000057] w-[95%] max-w-7xl text-white rounded-lg shadow-lg p-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <button className="bg-gray-800 p-3 rounded-lg flex items-center justify-center text-sm font-medium text-custom-green whitespace-nowrap">
                 <Radio className="mr-2 w-4 h-4" /> Go Live
               </button>
-              <button className="bg-gray-800 p-3 rounded-lg flex items-center justify-center text-sm font-medium text-custom-green" onClick={handleCameraClick}>
+              <button className="bg-gray-800 p-3 rounded-lg flex items-center justify-center text-sm font-medium text-custom-green whitespace-nowrap" onClick={handleCameraClick}>
                 <Camera className="mr-2 w-4 h-4" /> Camera
               </button>
-              <button className="bg-gray-800 p-3 rounded-lg flex items-center justify-center text-sm font-medium text-custom-green" onClick={() => {handleFileUploadClick('image')}}>
+              <button className="bg-gray-800 p-3 rounded-lg flex items-center justify-center text-sm font-medium text-custom-green whitespace-nowrap" onClick={() => {handleFileUploadClick('image')}}>
                 <ImageIcon className="mr-2 w-4 h-4" /> Gallery
               </button>
-              <button className="bg-gray-800 p-3 rounded-lg flex items-center justify-center text-sm font-medium text-custom-green" onClick={() => {handleFileUploadClick('video')}}>
+              <button className="bg-gray-800 p-3 rounded-lg flex items-center justify-center text-sm font-medium text-custom-green whitespace-nowrap" onClick={() => {handleFileUploadClick('video')}}>
                 <Video className="mr-2 w-4 h-4" />Video
               </button>
             </div>
@@ -1013,8 +1066,15 @@ const LiveAvatarSessionComponent: React.FC<{
         </>
       )}
       
-      <button
+      {/* <button
         className="fixed bottom-4 w-[11rem] ml-[7rem] bg-white text-black px-4 py-2 rounded-md z-20"
+        onClick={() => stopSession()}
+      >
+        Stop
+      </button> */}
+
+      <button
+        className="fixed bottom-4 left-1/2 -translate-x-1/2 w-[11rem] sm:w-[15rem] md:w-[18rem] lg:w-[22rem] max-w-[22rem] bg-white text-black px-4 py-2 rounded-md z-20"
         onClick={() => stopSession()}
       >
         Stop
