@@ -92,32 +92,34 @@ const LiveAvatarSessionComponent: React.FC<{
     }
   }, [sessionState, onSessionStopped]);
 
+  // Wrapper for stopSession to reset greeting trigger
+  const handleStopSession = useCallback(() => {
+    greetingTriggeredRef.current = false; // Reset greeting trigger
+    stopSession();
+  }, [stopSession]);
+
   useEffect(() => {
     // console.log("isStreamReady: ", isStreamReady);
     // console.log("videoRef.current: ", videoRef.current);
     if (isStreamReady && videoRef.current) {
       attachElement(videoRef.current);
       // console.log("attached element");
-      
-      // Trigger greeting after video is ready (only in FULL mode and only once)
-      if (mode === "FULL" && !greetingTriggeredRef.current && sessionRef.current) {
-        greetingTriggeredRef.current = true;
-        
-        // Wait a moment for video to render, then trigger greeting
-        const timer = setTimeout(() => {
-          if (sessionRef.current) {
-            // Send trigger message to start greeting
-            sessionRef.current.message("Please greet the user now");
-          }
-        }, 1000); // 1 second delay after video is ready
-        
-        // Cleanup timeout on unmount or if dependencies change
-        return () => {
-          clearTimeout(timer);
-        };
-      }
     }
-  }, [attachElement, isStreamReady, mode, sessionRef]);
+  }, [attachElement, isStreamReady]);
+
+  // Function to trigger greeting on first button click (only once, only if video is ready)
+  const triggerGreetingIfNeeded = useCallback(() => {
+    if (
+      mode === "FULL" &&
+      isStreamReady &&
+      !greetingTriggeredRef.current &&
+      sessionRef.current
+    ) {
+      greetingTriggeredRef.current = true;
+      // Send trigger message to start greeting
+      sessionRef.current.message("Please greet the user now");
+    }
+  }, [mode, isStreamReady, sessionRef]);
 
 
 
@@ -638,6 +640,9 @@ const LiveAvatarSessionComponent: React.FC<{
 
   
   const handleCameraClick = async () => {
+    // Trigger greeting on first button click (if not already triggered)
+    triggerGreetingIfNeeded();
+    
     if (isCameraActive) {
       // Stop camera if already active
       if (cameraStream) {
@@ -744,6 +749,9 @@ const LiveAvatarSessionComponent: React.FC<{
   };
 
   const handleFileUploadClick = (value: string) => {
+    // Trigger greeting on first button click (if not already triggered)
+    triggerGreetingIfNeeded();
+    
     setUploadType(value);
     fileInputRef.current?.setAttribute('accept', `${value}/*`);
     fileInputRef.current?.click();
@@ -1049,7 +1057,10 @@ const LiveAvatarSessionComponent: React.FC<{
           {/* ss added */}
           <div className="fixed bottom-[4rem] left-1/2 -translate-x-1/2 bg-[#00000057] w-[95%] max-w-7xl text-white rounded-lg shadow-lg p-4">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <button className="bg-gray-800 p-3 rounded-lg flex items-center justify-center text-sm font-medium text-custom-green whitespace-nowrap">
+              <button 
+                className="bg-gray-800 p-3 rounded-lg flex items-center justify-center text-sm font-medium text-custom-green whitespace-nowrap"
+                onClick={triggerGreetingIfNeeded}
+              >
                 <Radio className="mr-2 w-4 h-4" /> Go Live
               </button>
               <button className="bg-gray-800 p-3 rounded-lg flex items-center justify-center text-sm font-medium text-custom-green whitespace-nowrap" onClick={handleCameraClick}>
@@ -1075,7 +1086,7 @@ const LiveAvatarSessionComponent: React.FC<{
 
       <button
         className="fixed bottom-4 left-1/2 -translate-x-1/2 w-[11rem] sm:w-[15rem] md:w-[18rem] lg:w-[22rem] max-w-[22rem] bg-white text-black px-4 py-2 rounded-md z-20"
-        onClick={() => stopSession()}
+        onClick={handleStopSession}
       >
         Stop
       </button>
