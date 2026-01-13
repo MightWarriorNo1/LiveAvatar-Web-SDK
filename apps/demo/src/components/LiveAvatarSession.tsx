@@ -69,6 +69,7 @@ const LiveAvatarSessionComponent: React.FC<{
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [imageAnalysis, setImageAnalysis] = useState<string | null>(null);
   const [isAnalyzingImage, setIsAnalyzingImage] = useState(false);
+  const [isAnalyzingVideo, setIsAnalyzingVideo] = useState(false);
   const [isProcessingCameraQuestion, setIsProcessingCameraQuestion] = useState(false);
   const [cameraAvailable, setCameraAvailable] = useState<boolean | null>(null);
   const [fallbackImage, setFallbackImage] = useState<File | null>(null);
@@ -801,18 +802,74 @@ const LiveAvatarSessionComponent: React.FC<{
     };
   }, [fallbackImagePreview]);
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      // Check if file is an image
-      if (!file.type.startsWith("image/")) {
-        alert("Please upload an image file");
-        if (fileInputRef.current) {
-          fileInputRef.current.value = "";
-        }
+  // Helper function to extract frames from video
+  const extractVideoFrames = async (videoFile: File, numFrames: number = 5): Promise<string[]> => {
+    return new Promise((resolve, reject) => {
+      const video = document.createElement("video");
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+      
+      if (!ctx) {
+        reject(new Error("Failed to get canvas context"));
         return;
       }
 
+      video.preload = "metadata";
+      video.onloadedmetadata = () => {
+        video.currentTime = 0;
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+      };
+
+      const frames: string[] = [];
+      let frameCount = 0;
+
+      video.onseeked = () => {
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const frameData = canvas.toDataURL("image/jpeg", 0.8);
+        // Extract base64 data (remove data:image/jpeg;base64, prefix)
+        const base64Data = frameData.split(",")[1];
+        frames.push(base64Data);
+        frameCount++;
+
+        if (frameCount < numFrames) {
+          // Seek to next frame position
+          const nextTime = (video.duration / (numFrames + 1)) * (frameCount + 1);
+          video.currentTime = nextTime;
+        } else {
+          resolve(frames);
+        }
+      };
+
+      video.onerror = () => {
+        reject(new Error("Error loading video"));
+      };
+
+      video.src = URL.createObjectURL(videoFile);
+    });
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) {
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+      return;
+    }
+
+    const isImage = file.type.startsWith("image/");
+    const isVideo = file.type.startsWith("video/");
+
+    if (!isImage && !isVideo) {
+      alert("Please upload an image or video file");
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+      return;
+    }
+
+    if (isImage) {
       setIsAnalyzingImage(true);
       try {
         const formData = new FormData();
@@ -843,7 +900,41 @@ const LiveAvatarSessionComponent: React.FC<{
       } finally {
         setIsAnalyzingImage(false);
       }
+    } else if (isVideo) {
+      setIsAnalyzingVideo(true);
+      try {
+        // Extract frames from video
+        const frames = await extractVideoFrames(file, 5);
+        
+        const response = await fetch("/api/analyze-video", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ frames }),
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || "Failed to analyze video");
+        }
+
+        const data = await response.json();
+        console.log("Video analyzed successfully");
+        
+        // For FULL mode, send the analysis as context to the AI
+        if (mode === "FULL" && sessionRef.current) {
+          const contextMessage = `[VIDEO CONTEXT] I have uploaded a video. Here is the detailed analysis: ${data.analysis}. Please remember this analysis and use it to answer any questions I ask about the video or related content.`;
+          sessionRef.current.message(contextMessage);
+        }
+      } catch (error) {
+        console.error("Error analyzing video:", error);
+        alert("Failed to analyze video. Please try again.");
+      } finally {
+        setIsAnalyzingVideo(false);
+      }
     }
+
     // Reset input
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
@@ -885,10 +976,20 @@ const LiveAvatarSessionComponent: React.FC<{
 
   return (
     <div className="fixed inset-0 w-screen h-screen bg-black flex flex-col">
+      {/* Analyzing popup overlay */}
+      {(isAnalyzingImage || isAnalyzingVideo) && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-70">
+          <div className="bg-gray-800 text-white px-8 py-6 rounded-lg shadow-2xl">
+            <p className="text-xl font-semibold text-center">
+              {isAnalyzingImage ? "Analyzing Photo...." : "Analyzing Video...."}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Text overlays at the top */}
       <div className="absolute top-0 left-0 right-0 z-10 flex flex-col items-center pt-4 pb-2">
-        <h1 className="text-white text-2xl font-semibold">iSolveUrProblems-Beta</h1>
-        <p className="text-white text-xs mt-1">Everything except Murder</p>
+        <h1 className="text-white text-2xl font-semibold">iSolveUrProblems.ai - beta</h1>
         {microphoneWarning && (
           <div className="mt-4 bg-yellow-500 text-black px-4 py-2 rounded-md max-w-2xl text-center">
             <p className="font-semibold">⚠️ Warning: {microphoneWarning}</p>
@@ -1085,7 +1186,7 @@ const LiveAvatarSessionComponent: React.FC<{
       </button> */}
 
       <button
-        className="fixed bottom-4 left-1/2 -translate-x-1/2 w-[11rem] sm:w-[15rem] md:w-[18rem] lg:w-[22rem] max-w-[22rem] bg-white text-black px-4 py-2 rounded-md z-20"
+        className="fixed bottom-4 left-1/2 -translate-x-1/2 bg-gray-800 p-3 rounded-lg flex items-center justify-center text-sm font-medium text-custom-green whitespace-nowrap z-20"
         onClick={handleStopSession}
       >
         Stop
