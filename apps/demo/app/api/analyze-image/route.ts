@@ -36,10 +36,10 @@ export async function POST(request: Request) {
     let promptText: string;
     if (question && question.trim()) {
       // If there's a question, answer it based on what's in the image
-      promptText = `The user is asking: "${question}". Please look at this image and answer their question with a funny, gregarious, and happy personality! Be enthusiastic, use humor, be conversational, and inject cheerfulness into your response. Think of yourself as a friendly, outgoing friend who's excited to help! If the question is about something in the image, describe it in detail. If the question isn't directly related to what you see, still use what you see in the image to provide context or make your answer more interesting and relevant.`;
+      promptText = `The user is asking: "${question}". You can see this image clearly right now. Look at the image and answer their question directly with a funny, gregarious, and happy personality! Be enthusiastic, use humor, be conversational, and inject cheerfulness into your response. Think of yourself as a friendly, outgoing friend who's excited to help! Describe what you see in the image naturally - you have full visibility of it. Never say you can't see the image or that you're relying on someone else's analysis. You are directly viewing this image.`;
     } else {
       // Default analysis prompt
-      promptText = "Please analyze this image in detail with a funny, gregarious, and happy personality! Describe what you see, including objects, people, text, colors, layout, context, and any other relevant details. Be thorough and specific, but make your analysis entertaining, enthusiastic, and full of personality. Use humor, be conversational, and inject some cheerfulness into your observations. Think of yourself as a friendly, outgoing friend who's excited to tell someone about what they're seeing!";
+      promptText = "You can see this image clearly right now. Describe what you see in detail with a funny, gregarious, and happy personality! Include objects, people, text, colors, layout, context, and any other relevant details. Be thorough and specific, but make your description entertaining, enthusiastic, and full of personality. Use humor, be conversational, and inject some cheerfulness into your observations. Think of yourself as a friendly, outgoing friend who's excited to tell someone about what you're seeing! Never say you can't see the image - you are directly viewing it.";
     }
 
     // Call GrokAI (xAI) Vision API

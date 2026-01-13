@@ -93,11 +93,53 @@ const LiveAvatarSessionComponent: React.FC<{
     }
   }, [sessionState, onSessionStopped]);
 
-  // Wrapper for stopSession to reset greeting trigger
+  // Function to reset to home screen (close camera, clear uploads, but keep session)
+  const resetToHomeScreen = useCallback(() => {
+    // Close camera if active
+    if (cameraStream) {
+      cameraStream.getTracks().forEach((track) => track.stop());
+      setCameraStream(null);
+    }
+    setIsCameraActive(false);
+    
+    // Clean up preview URL if it's not the default fallback image
+    if (fallbackImagePreview && fallbackImage && fallbackImage.name !== '2c44c052-e58a-4f6d-a6c8-dba901ff0e9e.jpg') {
+      URL.revokeObjectURL(fallbackImagePreview);
+    }
+    setFallbackImage(null);
+    setFallbackImagePreview(null);
+    
+    // Clear analysis states
+    setImageAnalysis(null);
+    setIsAnalyzingImage(false);
+    setIsAnalyzingVideo(false);
+    setIsProcessingCameraQuestion(false);
+    
+    // Reset processing refs
+    lastProcessedQuestionRef.current = "";
+    hasAutoAnalyzedRef.current = false;
+    if (processingTimeoutRef.current) {
+      clearTimeout(processingTimeoutRef.current);
+      processingTimeoutRef.current = null;
+    }
+  }, [cameraStream, fallbackImage, fallbackImagePreview]);
+
+  // Check if we're on the home screen (no camera, no uploads)
+  const isOnHomeScreen = useCallback(() => {
+    return !isCameraActive && !imageAnalysis && !isAnalyzingImage && !isAnalyzingVideo;
+  }, [isCameraActive, imageAnalysis, isAnalyzingImage, isAnalyzingVideo]);
+
+  // Wrapper for stopSession - ends session on home screen, resets to home screen otherwise
   const handleStopSession = useCallback(() => {
-    greetingTriggeredRef.current = false; // Reset greeting trigger
-    stopSession();
-  }, [stopSession]);
+    if (isOnHomeScreen()) {
+      // On home screen: end the session
+      greetingTriggeredRef.current = false; // Reset greeting trigger
+      stopSession();
+    } else {
+      // Not on home screen: reset to home screen (keep session)
+      resetToHomeScreen();
+    }
+  }, [isOnHomeScreen, resetToHomeScreen, stopSession]);
 
   useEffect(() => {
     // console.log("isStreamReady: ", isStreamReady);
@@ -509,6 +551,9 @@ const LiveAvatarSessionComponent: React.FC<{
   }, [sessionRef, isCameraActive, processCameraQuestion]);
 
   // Automatically analyze and speak when camera mode is activated
+  // DISABLED: This was causing automatic snap when camera opens on mobile
+  // Users should manually trigger analysis by asking questions via voice
+  /*
   useEffect(() => {
     if (!isCameraActive) {
       // Reset the flag when camera is deactivated
@@ -566,6 +611,7 @@ const LiveAvatarSessionComponent: React.FC<{
       clearTimeout(timeoutId);
     };
   }, [isCameraActive, cameraStream, fallbackImage, processCameraQuestion]);
+  */
 
   // Function to load fallback image from public folder
   const loadFallbackImage = useCallback(async (): Promise<File> => {
@@ -891,7 +937,7 @@ const LiveAvatarSessionComponent: React.FC<{
         
         // For FULL mode, send the analysis as context to the AI
         if (mode === "FULL" && sessionRef.current) {
-          const contextMessage = `[IMAGE CONTEXT] I have uploaded an image. Here is the detailed analysis: ${data.analysis}. Please remember this analysis and use it to answer any questions I ask about the image or related content.`;
+          const contextMessage = `The user has shared an image with you. You can see this image clearly, and here's what you observe: ${data.analysis}. When the user asks about what they're seeing or asks questions about the image, respond as if you're directly viewing it. Describe what you see naturally and confidently - you have full visibility of the image.`;
           sessionRef.current.message(contextMessage);
         }
       } catch (error) {
@@ -924,7 +970,7 @@ const LiveAvatarSessionComponent: React.FC<{
         
         // For FULL mode, send the analysis as context to the AI
         if (mode === "FULL" && sessionRef.current) {
-          const contextMessage = `[VIDEO CONTEXT] I have uploaded a video. Here is the detailed analysis: ${data.analysis}. Please remember this analysis and use it to answer any questions I ask about the video or related content.`;
+          const contextMessage = `The user has shared a video with you. You can see this video clearly, and here's what you observe: ${data.analysis}. When the user asks about what they're seeing or asks questions about the video, respond as if you're directly viewing it. Describe what you see naturally and confidently - you have full visibility of the video.`;
           sessionRef.current.message(contextMessage);
         }
       } catch (error) {
@@ -1159,19 +1205,19 @@ const LiveAvatarSessionComponent: React.FC<{
           <div className="fixed bottom-[4rem] left-1/2 -translate-x-1/2 bg-[#00000057] w-[95%] max-w-7xl text-white rounded-lg shadow-lg p-4">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <button 
-                className="bg-gray-800 p-3 rounded-lg flex items-center justify-center text-sm font-medium text-custom-green whitespace-nowrap"
+                className="bg-gray-800 p-3 rounded-lg flex items-center justify-center text-lg font-medium text-custom-green whitespace-nowrap"
                 onClick={triggerGreetingIfNeeded}
               >
-                <Radio className="mr-2 w-4 h-4" /> Go Live
+                <Radio className="mr-2 w-5 h-5" /> Go Live
               </button>
-              <button className="bg-gray-800 p-3 rounded-lg flex items-center justify-center text-sm font-medium text-custom-green whitespace-nowrap" onClick={handleCameraClick}>
-                <Camera className="mr-2 w-4 h-4" /> Camera
+              <button className="bg-gray-800 p-3 rounded-lg flex items-center justify-center text-lg font-medium text-custom-green whitespace-nowrap" onClick={handleCameraClick}>
+                <Camera className="mr-2 w-5 h-5" /> Camera
               </button>
-              <button className="bg-gray-800 p-3 rounded-lg flex items-center justify-center text-sm font-medium text-custom-green whitespace-nowrap" onClick={() => {handleFileUploadClick('image')}}>
-                <ImageIcon className="mr-2 w-4 h-4" /> Gallery
+              <button className="bg-gray-800 p-3 rounded-lg flex items-center justify-center text-lg font-medium text-custom-green whitespace-nowrap" onClick={() => {handleFileUploadClick('image')}}>
+                <ImageIcon className="mr-2 w-5 h-5" /> Gallery
               </button>
-              <button className="bg-gray-800 p-3 rounded-lg flex items-center justify-center text-sm font-medium text-custom-green whitespace-nowrap" onClick={() => {handleFileUploadClick('video')}}>
-                <Video className="mr-2 w-4 h-4" />Video
+              <button className="bg-gray-800 p-3 rounded-lg flex items-center justify-center text-lg font-medium text-custom-green whitespace-nowrap" onClick={() => {handleFileUploadClick('video')}}>
+                <Video className="mr-2 w-5 h-5" />Video
               </button>
             </div>
           </div>
@@ -1186,7 +1232,7 @@ const LiveAvatarSessionComponent: React.FC<{
       </button> */}
 
       <button
-        className="fixed bottom-4 left-1/2 -translate-x-1/2 bg-gray-800 p-3 rounded-lg flex items-center justify-center text-sm font-medium text-custom-green whitespace-nowrap z-20"
+        className="fixed bottom-4 left-1/2 -translate-x-1/2 bg-gray-800 p-3 rounded-lg flex items-center justify-center text-lg font-medium text-custom-green whitespace-nowrap z-20"
         onClick={handleStopSession}
       >
         Stop

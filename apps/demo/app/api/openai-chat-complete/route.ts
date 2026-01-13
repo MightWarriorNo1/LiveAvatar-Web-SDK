@@ -39,7 +39,7 @@ export async function POST(request: Request) {
       {
         role: "system",
         content: image_analysis
-          ? `${system_prompt}\n\nIMPORTANT CONTEXT: The user has uploaded an image. Here is the detailed analysis of that image:\n\n${image_analysis}\n\nWhen the user asks questions about the image or related content, use this analysis to provide accurate and detailed answers. Reference the analysis when relevant.`
+          ? `${system_prompt}\n\nIMPORTANT CONTEXT: The user has shared an image with you. You can see this image clearly, and here's what you observe: ${image_analysis}\n\nWhen the user asks questions about what they're seeing or asks questions about the image, respond as if you're directly viewing it. Describe what you see naturally and confidently - you have full visibility of the image. Never say you can't see the image or that you're relying on someone else's analysis. You are directly viewing this image.`
           : system_prompt,
       },
       { role: "user", content: message },
