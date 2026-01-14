@@ -1232,7 +1232,7 @@ const LiveAvatarSessionComponent: React.FC<{
       </button> */}
 
       <button
-        className="fixed bottom-4 left-1/2 -translate-x-1/2 bg-gray-800 p-3 rounded-lg flex items-center justify-center text-lg font-medium text-custom-green whitespace-nowrap z-20"
+        className="fixed bottom-4 left-1/2 -translate-x-1/2 bg-gray-800 p-5 rounded-lg flex items-center justify-center text-xl font-medium text-custom-green whitespace-nowrap z-20"
         onClick={handleStopSession}
       >
         Stop
