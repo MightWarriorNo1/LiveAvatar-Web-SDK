@@ -1234,7 +1234,7 @@ const LiveAvatarSessionComponent: React.FC<{
       <div className="fixed bottom-4 left-1/2 -translate-x-1/2 w-[95%] max-w-7xl z-20 px-4">
         <div className="flex justify-center">
           <button
-            className="bg-gray-800 p-3 rounded-lg flex items-center justify-center text-lg font-medium text-custom-green whitespace-nowrap w-1/4 md:w-[12.5%]"
+            className="bg-gray-800 p-3 rounded-lg flex items-center justify-center text-xl font-medium text-custom-green whitespace-nowrap w-1/4 md:w-[12.5%]"
             onClick={handleStopSession}
           >
             Stop
