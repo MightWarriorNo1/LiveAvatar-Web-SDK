@@ -186,6 +186,41 @@ const LiveAvatarSessionComponent: React.FC<{
     }
   }, [mode, isStreamReady, sessionRef]);
 
+  // Function to load fallback image from public folder
+  const loadFallbackImage = useCallback(async (): Promise<File> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          reject(new Error('Failed to get canvas context'));
+          return;
+        }
+        ctx.drawImage(img, 0, 0);
+        canvas.toBlob((blob) => {
+          if (blob) {
+            const file = new File([blob], '2c44c052-e58a-4f6d-a6c8-dba901ff0e9e.jpg', { type: 'image/jpeg' });
+            resolve(file);
+          } else {
+            reject(new Error('Failed to convert canvas to blob'));
+          }
+        }, 'image/jpeg', 0.95);
+      };
+      
+      img.onerror = () => {
+        reject(new Error('Failed to load fallback image from public folder'));
+      };
+      
+      // Load image from public folder
+      img.src = '/2c44c052-e58a-4f6d-a6c8-dba901ff0e9e.jpg';
+    });
+  }, []);
+
   // Handle Go Live button - enable Vision mode (activate camera for discussion)
   const handleGoLive = useCallback(async () => {
     // Trigger greeting on first button click (if not already triggered)
@@ -778,41 +813,6 @@ const LiveAvatarSessionComponent: React.FC<{
     };
   }, [isCameraActive, cameraStream, fallbackImage, processCameraQuestion]);
   */
-
-  // Function to load fallback image from public folder
-  const loadFallbackImage = useCallback(async (): Promise<File> => {
-    return new Promise((resolve, reject) => {
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        canvas.width = img.width;
-        canvas.height = img.height;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          reject(new Error('Failed to get canvas context'));
-          return;
-        }
-        ctx.drawImage(img, 0, 0);
-        canvas.toBlob((blob) => {
-          if (blob) {
-            const file = new File([blob], '2c44c052-e58a-4f6d-a6c8-dba901ff0e9e.jpg', { type: 'image/jpeg' });
-            resolve(file);
-          } else {
-            reject(new Error('Failed to convert canvas to blob'));
-          }
-        }, 'image/jpeg', 0.95);
-      };
-      
-      img.onerror = () => {
-        reject(new Error('Failed to load fallback image from public folder'));
-      };
-      
-      // Load image from public folder
-      img.src = '/2c44c052-e58a-4f6d-a6c8-dba901ff0e9e.jpg';
-    });
-  }, []);
 
   // Check camera availability on mount and set default broken glass image
   useEffect(() => {
