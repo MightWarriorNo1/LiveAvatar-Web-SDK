@@ -84,6 +84,15 @@ const LiveAvatarSessionComponent: React.FC<{
   const [uploadType, setUploadType] = useState<string>('image');
   const isAttachedRef = useRef<boolean>(false);
   const greetingTriggeredRef = useRef<boolean>(false);
+  
+  // Video recording state
+  const [isVideoActive, setIsVideoActive] = useState(false);
+  const [videoStream, setVideoStream] = useState<MediaStream | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordedVideoBlob, setRecordedVideoBlob] = useState<Blob | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordedChunksRef = useRef<Blob[]>([]);
+  const videoPreviewRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
     if (sessionState === SessionState.DISCONNECTED) {
@@ -101,6 +110,19 @@ const LiveAvatarSessionComponent: React.FC<{
       setCameraStream(null);
     }
     setIsCameraActive(false);
+    
+    // Close video recording if active
+    if (videoStream) {
+      videoStream.getTracks().forEach((track) => track.stop());
+      setVideoStream(null);
+    }
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+    }
+    setIsVideoActive(false);
+    setRecordedVideoBlob(null);
+    recordedChunksRef.current = [];
     
     // Clean up preview URL if it's not the default fallback image
     if (fallbackImagePreview && fallbackImage && fallbackImage.name !== '2c44c052-e58a-4f6d-a6c8-dba901ff0e9e.jpg') {
@@ -122,12 +144,12 @@ const LiveAvatarSessionComponent: React.FC<{
       clearTimeout(processingTimeoutRef.current);
       processingTimeoutRef.current = null;
     }
-  }, [cameraStream, fallbackImage, fallbackImagePreview]);
+  }, [cameraStream, fallbackImage, fallbackImagePreview, videoStream, isRecording]);
 
-  // Check if we're on the home screen (no camera, no uploads)
+  // Check if we're on the home screen (no camera, no video, no uploads)
   const isOnHomeScreen = useCallback(() => {
-    return !isCameraActive && !imageAnalysis && !isAnalyzingImage && !isAnalyzingVideo;
-  }, [isCameraActive, imageAnalysis, isAnalyzingImage, isAnalyzingVideo]);
+    return !isCameraActive && !isVideoActive && !imageAnalysis && !isAnalyzingImage && !isAnalyzingVideo;
+  }, [isCameraActive, isVideoActive, imageAnalysis, isAnalyzingImage, isAnalyzingVideo]);
 
   // Wrapper for stopSession - ends session on home screen, resets to home screen otherwise
   const handleStopSession = useCallback(() => {
@@ -164,6 +186,14 @@ const LiveAvatarSessionComponent: React.FC<{
     }
   }, [mode, isStreamReady, sessionRef]);
 
+  // Handle Go Live button - reset to Vision (home screen) and trigger greeting
+  const handleGoLive = useCallback(() => {
+    // Reset to home screen (Vision) first
+    resetToHomeScreen();
+    // Then trigger greeting if needed
+    triggerGreetingIfNeeded();
+  }, [resetToHomeScreen, triggerGreetingIfNeeded]);
+
 
 
 
@@ -196,12 +226,15 @@ const LiveAvatarSessionComponent: React.FC<{
       if (cameraStream) {
         cameraStream.getTracks().forEach((track) => track.stop());
       }
+      if (videoStream) {
+        videoStream.getTracks().forEach((track) => track.stop());
+      }
       // Cleanup timeout on unmount
       if (processingTimeoutRef.current) {
         clearTimeout(processingTimeoutRef.current);
       }
     };
-  }, [cameraStream]);
+  }, [cameraStream, videoStream]);
 
   // Set camera stream to video element when both are available
   useEffect(() => {
@@ -230,6 +263,61 @@ const LiveAvatarSessionComponent: React.FC<{
       };
     }
   }, [cameraStream, isCameraActive]);
+
+  // Function to capture photo and analyze it
+  const handleSnapPhoto = useCallback(async () => {
+    if (!isCameraActive) {
+      return;
+    }
+
+    try {
+      setIsAnalyzingImage(true);
+      
+      // Capture frame from camera or use fallback image
+      const frameFile = await captureCameraFrame();
+      
+      if (!frameFile) {
+        console.error("Failed to capture camera frame");
+        setIsAnalyzingImage(false);
+        return;
+      }
+
+      // Analyze the photo
+      const formData = new FormData();
+      formData.append("image", frameFile);
+      formData.append("question", "What can you see in this image? Please describe everything you see with enthusiasm and humor!");
+
+      const response = await fetch("/api/analyze-image", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to analyze photo");
+      }
+
+      const data = await response.json();
+      const analysis = data.analysis;
+      setImageAnalysis(analysis);
+
+      // Send response to avatar
+      if (mode === "FULL" && sessionRef.current) {
+        await repeat(analysis);
+      }
+
+      // Auto return to home screen after analysis
+      setTimeout(() => {
+        resetToHomeScreen();
+      }, 1000);
+    } catch (error) {
+      console.error("Error capturing and analyzing photo:", error);
+      if (mode === "FULL") {
+        await repeat("Oops! I had a little trouble analyzing the photo. Could you try again?");
+      }
+      setIsAnalyzingImage(false);
+    }
+  }, [isCameraActive, captureCameraFrame, mode, sessionRef, repeat, resetToHomeScreen]);
 
   // Function to capture frame from camera video or use fallback image
   const captureCameraFrame = useCallback(async (): Promise<File | null> => {
@@ -799,10 +887,169 @@ const LiveAvatarSessionComponent: React.FC<{
     // Trigger greeting on first button click (if not already triggered)
     triggerGreetingIfNeeded();
     
+    // If video, handle video recording instead of file upload
+    if (value === 'video') {
+      handleVideoClick();
+      return;
+    }
+    
     setUploadType(value);
     fileInputRef.current?.setAttribute('accept', `${value}/*`);
     fileInputRef.current?.click();
   };
+
+  // Handle video recording
+  const handleVideoClick = async () => {
+    triggerGreetingIfNeeded();
+
+    if (isVideoActive) {
+      // Stop video recording if already active
+      if (videoStream) {
+        videoStream.getTracks().forEach((track) => track.stop());
+        setVideoStream(null);
+      }
+      if (mediaRecorderRef.current && isRecording) {
+        mediaRecorderRef.current.stop();
+        setIsRecording(false);
+      }
+      setIsVideoActive(false);
+      setRecordedVideoBlob(null);
+      recordedChunksRef.current = [];
+      return;
+    }
+
+    try {
+      // Get video stream
+      let stream: MediaStream | null = null;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "environment" },
+        });
+      } catch (error) {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: "user" },
+          });
+        } catch (error2) {
+          console.error("Error accessing camera for video:", error2);
+          alert("Unable to access camera for video recording");
+          return;
+        }
+      }
+
+      if (stream) {
+        setVideoStream(stream);
+        setIsVideoActive(true);
+      }
+    } catch (error) {
+      console.error("Error accessing camera for video:", error);
+      alert("Unable to access camera for video recording");
+    }
+  };
+
+  // Start video recording
+  const handleStartRecording = useCallback(() => {
+    if (!videoStream || !videoPreviewRef.current) {
+      return;
+    }
+
+    recordedChunksRef.current = [];
+    
+    // Check for supported MIME types
+    let mimeType = 'video/webm;codecs=vp9,opus';
+    if (!MediaRecorder.isTypeSupported(mimeType)) {
+      mimeType = 'video/webm;codecs=vp8,opus';
+      if (!MediaRecorder.isTypeSupported(mimeType)) {
+        mimeType = 'video/webm';
+        if (!MediaRecorder.isTypeSupported(mimeType)) {
+          mimeType = '';
+        }
+      }
+    }
+    
+    const options: MediaRecorderOptions = mimeType ? { mimeType } : {};
+    const mediaRecorder = new MediaRecorder(videoStream, options);
+
+    mediaRecorder.ondataavailable = (event) => {
+      if (event.data.size > 0) {
+        recordedChunksRef.current.push(event.data);
+      }
+    };
+
+    mediaRecorder.onstop = async () => {
+      const blob = new Blob(recordedChunksRef.current, { type: 'video/webm' });
+      setRecordedVideoBlob(blob);
+      
+      // Analyze the video
+      setIsAnalyzingVideo(true);
+      try {
+        const videoFile = new File([blob], "recorded-video.webm", { type: "video/webm" });
+        const frames = await extractVideoFrames(videoFile, 5);
+        
+        const response = await fetch("/api/analyze-video", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ frames }),
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || "Failed to analyze video");
+        }
+
+        const data = await response.json();
+        console.log("Video analyzed successfully");
+        
+        // For FULL mode, send the analysis as context to the AI
+        if (mode === "FULL" && sessionRef.current) {
+          const contextMessage = `The user has shared a video with you. You can see this video clearly, and here's what you observe: ${data.analysis}. When the user asks about what they're seeing or asks questions about the video, respond as if you're directly viewing it. Describe what you see naturally and confidently - you have full visibility of the video.`;
+          await repeat(contextMessage);
+        }
+
+        // Auto return to home screen after analysis
+        setTimeout(() => {
+          resetToHomeScreen();
+          if (videoStream) {
+            videoStream.getTracks().forEach((track) => track.stop());
+            setVideoStream(null);
+          }
+          setIsVideoActive(false);
+          setRecordedVideoBlob(null);
+          recordedChunksRef.current = [];
+        }, 1000);
+      } catch (error) {
+        console.error("Error analyzing video:", error);
+        alert("Failed to analyze video. Please try again.");
+        setIsAnalyzingVideo(false);
+      }
+    };
+
+    mediaRecorderRef.current = mediaRecorder;
+    mediaRecorder.start();
+    setIsRecording(true);
+  }, [videoStream, mode, sessionRef, repeat, resetToHomeScreen]);
+
+  // Stop video recording
+  const handleStopRecording = useCallback(() => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+    }
+  }, [isRecording]);
+
+  // Set video stream to video element when both are available
+  useEffect(() => {
+    if (videoStream && videoPreviewRef.current) {
+      const video = videoPreviewRef.current;
+      video.srcObject = videoStream;
+      
+      video.play().catch((error) => {
+        console.error("Error playing video stream:", error);
+      });
+    }
+  }, [videoStream, isVideoActive]);
 
   const handleCameraChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1054,8 +1301,8 @@ const LiveAvatarSessionComponent: React.FC<{
       </div>
 
       {/* Full screen video */}
-      <div className={`relative w-full flex-1 flex items-center justify-center ${isCameraActive ? 'pt-24' : ''}`}>
-        {/* Avatar video - full screen when camera inactive, small overlay in left corner when camera active */}
+      <div className={`relative w-full flex-1 flex items-center justify-center ${isCameraActive || isVideoActive ? 'pt-24' : ''}`}>
+        {/* Avatar video - full screen when camera/video inactive, small overlay in left corner when active */}
         <video
           ref={videoRef}
           autoPlay  // Native autoplay
@@ -1063,7 +1310,7 @@ const LiveAvatarSessionComponent: React.FC<{
           preload="auto"
           muted={false}
           className={`${
-            isCameraActive 
+            isCameraActive || isVideoActive
               ? 'absolute top-24 left-4 w-24 h-44 object-contain z-20 rounded-lg border-2 border-white shadow-2xl' 
               : 'h-full w-full object-contain'
           }`}
@@ -1089,8 +1336,20 @@ const LiveAvatarSessionComponent: React.FC<{
           </>
         )}
 
+        {/* Video Recording Preview - full screen under header when active */}
+        {isVideoActive && (
+          <div className="absolute inset-0 pt-24 flex items-center justify-center z-10">
+            <video
+              ref={videoPreviewRef}
+              autoPlay
+              playsInline
+              className="max-h-[calc(100vh-6rem)] w-full object-contain"
+            />
+          </div>
+        )}
+
         {/* Camera Preview - full screen under header when active */}
-        {isCameraActive && (
+        {isCameraActive && !isVideoActive && (
           <div className="absolute inset-0 pt-24 flex items-center justify-center z-10">
             {cameraAvailable === false && fallbackImagePreview ? (
               // Fallback image preview (default image from public folder)
@@ -1154,6 +1413,40 @@ const LiveAvatarSessionComponent: React.FC<{
             )}
           </div>
         )}
+
+        {/* Snap Photo Button - shown when camera is active */}
+        {isCameraActive && !isVideoActive && (
+          <div className="fixed bottom-32 left-1/2 transform -translate-x-1/2 z-30">
+            <button
+              onClick={handleSnapPhoto}
+              disabled={isAnalyzingImage || isProcessingCameraQuestion}
+              className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white rounded-full w-20 h-20 flex items-center justify-center shadow-2xl border-4 border-white"
+            >
+              <Camera className="w-10 h-10" />
+            </button>
+          </div>
+        )}
+
+        {/* Video Recording Controls - shown when video is active */}
+        {isVideoActive && (
+          <div className="fixed bottom-32 left-1/2 transform -translate-x-1/2 z-30 flex gap-4">
+            {!isRecording ? (
+              <button
+                onClick={handleStartRecording}
+                className="bg-red-600 hover:bg-red-700 text-white rounded-full w-20 h-20 flex items-center justify-center shadow-2xl border-4 border-white"
+              >
+                <Video className="w-10 h-10" />
+              </button>
+            ) : (
+              <button
+                onClick={handleStopRecording}
+                className="bg-red-600 hover:bg-red-700 text-white rounded-lg px-6 py-3 flex items-center justify-center shadow-2xl border-4 border-white"
+              >
+                Stop Recording
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Fixed buttons at bottom - positioned relative to viewport */}
@@ -1206,7 +1499,7 @@ const LiveAvatarSessionComponent: React.FC<{
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <button 
                 className="bg-gray-800 p-3 rounded-lg flex items-center justify-center text-lg font-medium text-custom-green whitespace-nowrap"
-                onClick={triggerGreetingIfNeeded}
+                onClick={handleGoLive}
               >
                 <Radio className="mr-2 w-5 h-5" /> Go Live
               </button>
