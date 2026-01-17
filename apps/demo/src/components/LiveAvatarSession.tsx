@@ -264,61 +264,6 @@ const LiveAvatarSessionComponent: React.FC<{
     }
   }, [cameraStream, isCameraActive]);
 
-  // Function to capture photo and analyze it
-  const handleSnapPhoto = useCallback(async () => {
-    if (!isCameraActive) {
-      return;
-    }
-
-    try {
-      setIsAnalyzingImage(true);
-      
-      // Capture frame from camera or use fallback image
-      const frameFile = await captureCameraFrame();
-      
-      if (!frameFile) {
-        console.error("Failed to capture camera frame");
-        setIsAnalyzingImage(false);
-        return;
-      }
-
-      // Analyze the photo
-      const formData = new FormData();
-      formData.append("image", frameFile);
-      formData.append("question", "What can you see in this image? Please describe everything you see with enthusiasm and humor!");
-
-      const response = await fetch("/api/analyze-image", {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Failed to analyze photo");
-      }
-
-      const data = await response.json();
-      const analysis = data.analysis;
-      setImageAnalysis(analysis);
-
-      // Send response to avatar
-      if (mode === "FULL" && sessionRef.current) {
-        await repeat(analysis);
-      }
-
-      // Auto return to home screen after analysis
-      setTimeout(() => {
-        resetToHomeScreen();
-      }, 1000);
-    } catch (error) {
-      console.error("Error capturing and analyzing photo:", error);
-      if (mode === "FULL") {
-        await repeat("Oops! I had a little trouble analyzing the photo. Could you try again?");
-      }
-      setIsAnalyzingImage(false);
-    }
-  }, [isCameraActive, captureCameraFrame, mode, sessionRef, repeat, resetToHomeScreen]);
-
   // Function to capture frame from camera video or use fallback image
   const captureCameraFrame = useCallback(async (): Promise<File | null> => {
     if (!isCameraActive) {
@@ -403,6 +348,61 @@ const LiveAvatarSessionComponent: React.FC<{
       return null;
     }
   }, [isCameraActive, fallbackImage]);
+
+  // Function to capture photo and analyze it
+  const handleSnapPhoto = useCallback(async () => {
+    if (!isCameraActive) {
+      return;
+    }
+
+    try {
+      setIsAnalyzingImage(true);
+      
+      // Capture frame from camera or use fallback image
+      const frameFile = await captureCameraFrame();
+      
+      if (!frameFile) {
+        console.error("Failed to capture camera frame");
+        setIsAnalyzingImage(false);
+        return;
+      }
+
+      // Analyze the photo
+      const formData = new FormData();
+      formData.append("image", frameFile);
+      formData.append("question", "What can you see in this image? Please describe everything you see with enthusiasm and humor!");
+
+      const response = await fetch("/api/analyze-image", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to analyze photo");
+      }
+
+      const data = await response.json();
+      const analysis = data.analysis;
+      setImageAnalysis(analysis);
+
+      // Send response to avatar
+      if (mode === "FULL" && sessionRef.current) {
+        await repeat(analysis);
+      }
+
+      // Auto return to home screen after analysis
+      setTimeout(() => {
+        resetToHomeScreen();
+      }, 1000);
+    } catch (error) {
+      console.error("Error capturing and analyzing photo:", error);
+      if (mode === "FULL") {
+        await repeat("Oops! I had a little trouble analyzing the photo. Could you try again?");
+      }
+      setIsAnalyzingImage(false);
+    }
+  }, [isCameraActive, captureCameraFrame, mode, sessionRef, repeat, resetToHomeScreen]);
 
   // Function to process camera question (reusable for both voice and debug button)
   const processCameraQuestion = useCallback(async (question: string, skipDuplicateCheck: boolean = false) => {
