@@ -186,13 +186,88 @@ const LiveAvatarSessionComponent: React.FC<{
     }
   }, [mode, isStreamReady, sessionRef]);
 
-  // Handle Go Live button - reset to Vision (home screen) and trigger greeting
-  const handleGoLive = useCallback(() => {
-    // Reset to home screen (Vision) first
-    resetToHomeScreen();
-    // Then trigger greeting if needed
+  // Handle Go Live button - enable Vision mode (activate camera for discussion)
+  const handleGoLive = useCallback(async () => {
+    // Trigger greeting on first button click (if not already triggered)
     triggerGreetingIfNeeded();
-  }, [resetToHomeScreen, triggerGreetingIfNeeded]);
+    
+    // If camera is already active, we're already in Vision mode
+    if (isCameraActive) {
+      return;
+    }
+
+    // Activate Vision mode by opening camera
+    // If camera is not available, show fallback mode with default image
+    if (cameraAvailable === false) {
+      setIsCameraActive(true);
+      // If fallback image is not already set, load it
+      if (!fallbackImage) {
+        loadFallbackImage().then((file) => {
+          setFallbackImage(file);
+          const previewUrl = URL.createObjectURL(file);
+          setFallbackImagePreview(previewUrl);
+        }).catch((error) => {
+          console.error("Error loading fallback image:", error);
+        });
+      }
+      return;
+    }
+
+    try {
+      // First try to get rear camera (environment)
+      let stream: MediaStream | null = null;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "environment" },
+        });
+        setCameraAvailable(true);
+      } catch (error) {
+        // If rear camera fails, try front camera (user)
+        console.log("Rear camera not available, trying front camera");
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: "user" },
+          });
+          setCameraAvailable(true);
+        } catch (error2) {
+          // No camera available, use fallback mode with default image
+          console.log("No camera available, using fallback mode");
+          setCameraAvailable(false);
+          setIsCameraActive(true);
+          // If fallback image is not already set, load it
+          if (!fallbackImage) {
+            loadFallbackImage().then((file) => {
+              setFallbackImage(file);
+              const previewUrl = URL.createObjectURL(file);
+              setFallbackImagePreview(previewUrl);
+            }).catch((error) => {
+              console.error("Error loading fallback image:", error);
+            });
+          }
+          return;
+        }
+      }
+
+      if (stream) {
+        setCameraStream(stream);
+        setIsCameraActive(true);
+      }
+    } catch (error) {
+      console.error("Error accessing camera:", error);
+      // Use fallback mode instead of showing error
+      setCameraAvailable(false);
+      setIsCameraActive(true);
+      if (!fallbackImage) {
+        loadFallbackImage().then((file) => {
+          setFallbackImage(file);
+          const previewUrl = URL.createObjectURL(file);
+          setFallbackImagePreview(previewUrl);
+        }).catch((error) => {
+          console.error("Error loading fallback image:", error);
+        });
+      }
+    }
+  }, [triggerGreetingIfNeeded, isCameraActive, cameraAvailable, fallbackImage, loadFallbackImage]);
 
 
 
@@ -386,15 +461,18 @@ const LiveAvatarSessionComponent: React.FC<{
       const analysis = data.analysis;
       setImageAnalysis(analysis);
 
-      // Send response to avatar
+      // Store analysis as context for future questions, but ask short question
       if (mode === "FULL" && sessionRef.current) {
-        await repeat(analysis);
+        // Send analysis as context to AI so it knows what's in the image
+        const contextMessage = `The user has shared an image with you. You can see this image clearly, and here's what you observe: ${analysis}. When the user asks about what they're seeing or asks questions about the image, respond as if you're directly viewing it. Describe what you see naturally and confidently - you have full visibility of the image.`;
+        sessionRef.current.message(contextMessage);
+        
+        // Ask short question instead of full analysis
+        await repeat("What problems can I help you solve that are in this picture?");
       }
 
-      // Auto return to home screen after analysis
-      setTimeout(() => {
-        resetToHomeScreen();
-      }, 1000);
+      // Keep camera active for discussion - don't auto-return to home screen
+      setIsAnalyzingImage(false);
     } catch (error) {
       console.error("Error capturing and analyzing photo:", error);
       if (mode === "FULL") {
@@ -1004,21 +1082,16 @@ const LiveAvatarSessionComponent: React.FC<{
         
         // For FULL mode, send the analysis as context to the AI
         if (mode === "FULL" && sessionRef.current) {
+          // Send analysis as context to AI so it knows what's in the video
           const contextMessage = `The user has shared a video with you. You can see this video clearly, and here's what you observe: ${data.analysis}. When the user asks about what they're seeing or asks questions about the video, respond as if you're directly viewing it. Describe what you see naturally and confidently - you have full visibility of the video.`;
-          await repeat(contextMessage);
+          sessionRef.current.message(contextMessage);
+          
+          // Ask short question instead of full analysis
+          await repeat("What problems can I help you solve that are in this video?");
         }
 
-        // Auto return to home screen after analysis
-        setTimeout(() => {
-          resetToHomeScreen();
-          if (videoStream) {
-            videoStream.getTracks().forEach((track) => track.stop());
-            setVideoStream(null);
-          }
-          setIsVideoActive(false);
-          setRecordedVideoBlob(null);
-          recordedChunksRef.current = [];
-        }, 1000);
+        // Keep video active for discussion - don't auto-return to home screen
+        setIsAnalyzingVideo(false);
       } catch (error) {
         console.error("Error analyzing video:", error);
         alert("Failed to analyze video. Please try again.");
@@ -1184,8 +1257,12 @@ const LiveAvatarSessionComponent: React.FC<{
         
         // For FULL mode, send the analysis as context to the AI
         if (mode === "FULL" && sessionRef.current) {
+          // Send analysis as context to AI so it knows what's in the image
           const contextMessage = `The user has shared an image with you. You can see this image clearly, and here's what you observe: ${data.analysis}. When the user asks about what they're seeing or asks questions about the image, respond as if you're directly viewing it. Describe what you see naturally and confidently - you have full visibility of the image.`;
           sessionRef.current.message(contextMessage);
+          
+          // Ask short question instead of full analysis
+          await repeat("What problems can I help you solve that are in this picture?");
         }
       } catch (error) {
         console.error("Error analyzing image:", error);
@@ -1217,8 +1294,12 @@ const LiveAvatarSessionComponent: React.FC<{
         
         // For FULL mode, send the analysis as context to the AI
         if (mode === "FULL" && sessionRef.current) {
+          // Send analysis as context to AI so it knows what's in the video
           const contextMessage = `The user has shared a video with you. You can see this video clearly, and here's what you observe: ${data.analysis}. When the user asks about what they're seeing or asks questions about the video, respond as if you're directly viewing it. Describe what you see naturally and confidently - you have full visibility of the video.`;
           sessionRef.current.message(contextMessage);
+          
+          // Ask short question instead of full analysis
+          await repeat("What problems can I help you solve that are in this video?");
         }
       } catch (error) {
         console.error("Error analyzing video:", error);
