@@ -85,6 +85,9 @@ const LiveAvatarSessionComponent: React.FC<{
   const isAttachedRef = useRef<boolean>(false);
   const greetingTriggeredRef = useRef<boolean>(false);
   
+  // Vision mode state: 'streaming' for Go Live, 'snapshot' for Camera button, null for inactive
+  const [visionMode, setVisionMode] = useState<'streaming' | 'snapshot' | null>(null);
+  
   // Video recording state
   const [isVideoActive, setIsVideoActive] = useState(false);
   const [videoStream, setVideoStream] = useState<MediaStream | null>(null);
@@ -110,6 +113,7 @@ const LiveAvatarSessionComponent: React.FC<{
       setCameraStream(null);
     }
     setIsCameraActive(false);
+    setVisionMode(null);
     
     // Close video recording if active
     if (videoStream) {
@@ -221,17 +225,19 @@ const LiveAvatarSessionComponent: React.FC<{
     });
   }, []);
 
-  // Handle Go Live button - enable Vision mode (activate camera for discussion)
+  // Handle Go Live button - enable real-time streaming vision mode (verbal questions)
   const handleGoLive = useCallback(async () => {
     // Trigger greeting on first button click (if not already triggered)
     triggerGreetingIfNeeded();
     
-    // If camera is already active, we're already in Vision mode
-    if (isCameraActive) {
+    // If already in streaming vision mode, return
+    if (visionMode === 'streaming') {
       return;
     }
 
-    // Activate Vision mode by opening camera
+    // Activate streaming Vision mode
+    setVisionMode('streaming');
+    
     // If camera is not available, show fallback mode with default image
     if (cameraAvailable === false) {
       setIsCameraActive(true);
@@ -302,7 +308,7 @@ const LiveAvatarSessionComponent: React.FC<{
         });
       }
     }
-  }, [triggerGreetingIfNeeded, isCameraActive, cameraAvailable, fallbackImage, loadFallbackImage]);
+  }, [triggerGreetingIfNeeded, visionMode, cameraAvailable, fallbackImage, loadFallbackImage]);
 
 
 
@@ -459,9 +465,9 @@ const LiveAvatarSessionComponent: React.FC<{
     }
   }, [isCameraActive, fallbackImage]);
 
-  // Function to capture photo and analyze it
+  // Function to capture photo and analyze it (only for snapshot mode)
   const handleSnapPhoto = useCallback(async () => {
-    if (!isCameraActive) {
+    if (!isCameraActive || visionMode !== 'snapshot') {
       return;
     }
 
@@ -476,6 +482,21 @@ const LiveAvatarSessionComponent: React.FC<{
         setIsAnalyzingImage(false);
         return;
       }
+
+      // Close camera preview and return to full avatar display
+      if (cameraStream) {
+        cameraStream.getTracks().forEach((track) => track.stop());
+        setCameraStream(null);
+      }
+      setIsCameraActive(false);
+      setVisionMode(null);
+      
+      // Clean up preview URL if it's not the default fallback image
+      if (fallbackImagePreview && fallbackImage && fallbackImage.name !== '2c44c052-e58a-4f6d-a6c8-dba901ff0e9e.jpg') {
+        URL.revokeObjectURL(fallbackImagePreview);
+      }
+      setFallbackImage(null);
+      setFallbackImagePreview(null);
 
       // Analyze the photo
       const formData = new FormData();
@@ -506,7 +527,6 @@ const LiveAvatarSessionComponent: React.FC<{
         await repeat("What problems can I help you solve that are in this picture?");
       }
 
-      // Keep camera active for discussion - don't auto-return to home screen
       setIsAnalyzingImage(false);
     } catch (error) {
       console.error("Error capturing and analyzing photo:", error);
@@ -515,14 +535,15 @@ const LiveAvatarSessionComponent: React.FC<{
       }
       setIsAnalyzingImage(false);
     }
-  }, [isCameraActive, captureCameraFrame, mode, sessionRef, repeat, resetToHomeScreen]);
+  }, [isCameraActive, visionMode, captureCameraFrame, cameraStream, fallbackImage, fallbackImagePreview, mode, sessionRef, repeat]);
 
-  // Function to process camera question (reusable for both voice and debug button)
+  // Function to process camera question (only for streaming mode - verbal questions)
   const processCameraQuestion = useCallback(async (question: string, skipDuplicateCheck: boolean = false) => {
-    console.log("processCameraQuestion called", { question, skipDuplicateCheck, isCameraActive, isProcessingCameraQuestion });
+    console.log("processCameraQuestion called", { question, skipDuplicateCheck, isCameraActive, visionMode, isProcessingCameraQuestion });
     
-    if (!isCameraActive) {
-      console.log("Camera not active, returning early");
+    // Only process in streaming mode (Go Live)
+    if (!isCameraActive || visionMode !== 'streaming') {
+      console.log("Not in streaming vision mode, returning early");
       return;
     }
 
@@ -678,7 +699,7 @@ const LiveAvatarSessionComponent: React.FC<{
     }
   }, [processCameraQuestion, isProcessingCameraQuestion, isCameraActive, fallbackImage, cameraAvailable]);
 
-  // Listen to user transcriptions and handle all questions when camera is active
+  // Listen to user transcriptions and handle verbal questions in streaming mode (Go Live)
   useEffect(() => {
     if (!sessionRef.current) {
       return;
@@ -686,7 +707,13 @@ const LiveAvatarSessionComponent: React.FC<{
 
     const handleUserTranscription = async (event: { text: string }) => {
       const userText = event.text.trim();
-      console.log("User transcription received:", userText);
+      console.log("User transcription received:", userText, "Vision mode:", visionMode);
+      
+      // Only process in streaming mode (Go Live)
+      if (visionMode !== 'streaming') {
+        console.log("Not in streaming mode, skipping transcription processing");
+        return;
+      }
       
       // Skip if this transcription matches our recent avatar response (avatar's speech being transcribed)
       // This prevents infinite loops where avatar's response triggers another analysis
@@ -728,11 +755,11 @@ const LiveAvatarSessionComponent: React.FC<{
         return;
       }
       
-      // Process the question using the reusable function
+      // Process the question using the reusable function (only in streaming mode)
       await processCameraQuestion(userText, false);
     };
 
-    console.log("Setting up USER_TRANSCRIPTION listener, camera active:", isCameraActive);
+    console.log("Setting up USER_TRANSCRIPTION listener, vision mode:", visionMode);
     sessionRef.current.on(AgentEventsEnum.USER_TRANSCRIPTION, handleUserTranscription);
 
     return () => {
@@ -749,7 +776,7 @@ const LiveAvatarSessionComponent: React.FC<{
         }
       }
     };
-  }, [sessionRef, isCameraActive, processCameraQuestion]);
+  }, [sessionRef, visionMode, processCameraQuestion]);
 
   // Automatically analyze and speak when camera mode is activated
   // DISABLED: This was causing automatic snap when camera opens on mobile
@@ -856,13 +883,14 @@ const LiveAvatarSessionComponent: React.FC<{
     // Trigger greeting on first button click (if not already triggered)
     triggerGreetingIfNeeded();
     
-    if (isCameraActive) {
-      // Stop camera if already active
+    if (visionMode === 'snapshot') {
+      // Stop camera if already in snapshot mode
       if (cameraStream) {
         cameraStream.getTracks().forEach((track) => track.stop());
         setCameraStream(null);
       }
       setIsCameraActive(false);
+      setVisionMode(null);
       setFallbackImage(null);
       setFallbackImagePreview(null);
       
@@ -870,6 +898,9 @@ const LiveAvatarSessionComponent: React.FC<{
       // Audio should continue playing
       return;
     }
+
+    // Set to snapshot mode (for taking a single photo)
+    setVisionMode('snapshot');
 
     // If camera is not available, show fallback mode with default image
     if (cameraAvailable === false) {
@@ -1143,6 +1174,7 @@ const LiveAvatarSessionComponent: React.FC<{
       setCameraStream(null);
     }
     setIsCameraActive(false);
+    setVisionMode(null);
     // Clean up preview URL if it's not the default fallback image
     if (fallbackImagePreview && fallbackImage && fallbackImage.name !== '2c44c052-e58a-4f6d-a6c8-dba901ff0e9e.jpg') {
       URL.revokeObjectURL(fallbackImagePreview);
@@ -1495,8 +1527,8 @@ const LiveAvatarSessionComponent: React.FC<{
           </div>
         )}
 
-        {/* Snap Photo Button - shown when camera is active */}
-        {isCameraActive && !isVideoActive && (
+        {/* Snap Photo Button - shown only in snapshot mode (Camera button) */}
+        {isCameraActive && !isVideoActive && visionMode === 'snapshot' && (
           <div className="fixed bottom-32 left-1/2 transform -translate-x-1/2 z-30">
             <button
               onClick={handleSnapPhoto}
@@ -1574,6 +1606,22 @@ const LiveAvatarSessionComponent: React.FC<{
               )}
             </button>
           )} */}
+
+          {/* Status text above buttons */}
+          {sessionState !== SessionState.DISCONNECTED && (
+            <div className="fixed bottom-[13rem] left-1/2 -translate-x-1/2 z-30">
+              <p className="text-white text-2xl font-semibold italic text-center drop-shadow-lg">
+                {!isStreamReady ? (
+                  <span className="inline-flex items-center">
+                    Connecting
+                    <span className="inline-block animate-pulse">...</span>
+                  </span>
+                ) : (
+                  "Ask Anything"
+                )}
+              </p>
+            </div>
+          )}
 
           {/* ss added */}
           <div className="fixed bottom-[4rem] left-1/2 -translate-x-1/2 bg-[#00000057] w-[95%] max-w-7xl text-white rounded-lg shadow-lg p-4">
