@@ -177,6 +177,21 @@ const LiveAvatarSessionComponent: React.FC<{
     }
   }, [attachElement, isStreamReady]);
 
+  // Ensure video has volume and is not muted whenever video element is available
+  useEffect(() => {
+    if (videoRef.current) {
+      const video = videoRef.current;
+      video.volume = 1.0;
+      video.muted = false;
+      // Also ensure audio tracks are enabled if available
+      if (video.srcObject && video.srcObject instanceof MediaStream) {
+        video.srcObject.getAudioTracks().forEach(track => {
+          track.enabled = true;
+        });
+      }
+    }
+  }, [isStreamReady]);
+
   // Function to trigger greeting on first button click (only once, only if video is ready)
   const triggerGreetingIfNeeded = useCallback(() => {
     if (
@@ -763,6 +778,18 @@ const LiveAvatarSessionComponent: React.FC<{
       // User questions are typically shorter, avatar responses are longer
       if (userText.length > 200) {
         console.log("Skipping transcription - too long, likely avatar response");
+        return;
+      }
+      
+      // Skip if transcription is too short (likely noise or partial speech)
+      if (userText.length < 3) {
+        console.log("Skipping transcription - too short, likely noise");
+        return;
+      }
+      
+      // Skip if already processing to prevent duplicate triggers
+      if (isProcessingCameraQuestion) {
+        console.log("Skipping transcription - already processing");
         return;
       }
       
@@ -1419,14 +1446,6 @@ const LiveAvatarSessionComponent: React.FC<{
           </div>
         </div>
       )}
-      {/* Small non-blocking indicator for streaming mode */}
-      {(isAnalyzingImage || isProcessingCameraQuestion) && visionMode === 'streaming' && (
-        <div className="fixed top-20 right-4 z-50 bg-gray-800 bg-opacity-90 text-white px-4 py-2 rounded-lg shadow-lg">
-          <p className="text-sm font-medium">
-            🔄 Analyzing...
-          </p>
-        </div>
-      )}
 
       {/* Text overlays at the top */}
       <div className="absolute top-0 left-0 right-0 z-10 flex flex-col items-center pt-4 pb-2">
@@ -1658,13 +1677,22 @@ const LiveAvatarSessionComponent: React.FC<{
             </div>
           )}
 
-          {/* Loading text for vision recognition in streaming mode */}
-          {showVisionLoading && visionMode === 'streaming' && (
+          {/* Loading/Analyzing text for vision recognition in streaming mode */}
+          {((showVisionLoading || (isAnalyzingImage || isProcessingCameraQuestion)) && visionMode === 'streaming') && (
             <div className="fixed bottom-[15rem] left-1/2 -translate-x-1/2 z-30">
               <p className="text-custom-green text-2xl font-semibold text-center drop-shadow-lg">
                 <span className="inline-flex items-center">
-                  Loading
-                  <span className="inline-block animate-pulse">....</span>
+                  {showVisionLoading ? (
+                    <>
+                      Loading
+                      <span className="inline-block animate-pulse">....</span>
+                    </>
+                  ) : (
+                    <>
+                      Analyzing
+                      <span className="inline-block animate-pulse">...</span>
+                    </>
+                  )}
                 </span>
               </p>
             </div>
