@@ -71,6 +71,7 @@ const LiveAvatarSessionComponent: React.FC<{
   const [isAnalyzingImage, setIsAnalyzingImage] = useState(false);
   const [isAnalyzingVideo, setIsAnalyzingVideo] = useState(false);
   const [isProcessingCameraQuestion, setIsProcessingCameraQuestion] = useState(false);
+  const [showVisionLoading, setShowVisionLoading] = useState(false);
   const [cameraAvailable, setCameraAvailable] = useState<boolean | null>(null);
   const [fallbackImage, setFallbackImage] = useState<File | null>(null);
   const [fallbackImagePreview, setFallbackImagePreview] = useState<string | null>(null);
@@ -227,9 +228,6 @@ const LiveAvatarSessionComponent: React.FC<{
 
   // Handle Go Live button - enable real-time streaming vision mode (verbal questions)
   const handleGoLive = useCallback(async () => {
-    // Trigger greeting on first button click (if not already triggered)
-    triggerGreetingIfNeeded();
-    
     // If already in streaming vision mode, return
     if (visionMode === 'streaming') {
       return;
@@ -579,6 +577,10 @@ const LiveAvatarSessionComponent: React.FC<{
     console.log("Processing question with camera frame analysis...");
     setIsProcessingCameraQuestion(true);
     setIsAnalyzingImage(true);
+    // Show loading text for vision recognition in streaming mode (initial recognition)
+    if (visionMode === 'streaming' && userText.length === 0 && skipDuplicateCheck) {
+      setShowVisionLoading(true);
+    }
     lastProcessedQuestionRef.current = userText;
 
     try {
@@ -626,11 +628,18 @@ const LiveAvatarSessionComponent: React.FC<{
       console.log("Analysis received:", analysis.substring(0, 100) + "...");
       setImageAnalysis(analysis);
 
-      // The analysis from GrokAI already includes the answer to the question with funny, gregarious, and happy tone
-      const responseMessage = analysis;
+      // For initial recognition (empty question with skipDuplicateCheck), append the specific message
+      let responseMessage = analysis;
+      if (userText.length === 0 && skipDuplicateCheck) {
+        // This is initial recognition when Go Live starts - append the specific question
+        responseMessage = analysis + " What problems can I help you solve that we're looking at today?";
+      }
 
       // Store the response to filter out avatar transcriptions later
       lastAvatarResponseRef.current = responseMessage.substring(0, 100); // Store first 100 chars for comparison
+
+      // Hide loading when we start sending response to avatar
+      setShowVisionLoading(false);
 
       // Send the response to the avatar - use repeat() to speak directly without AI processing
       if (mode === "FULL") {
@@ -645,6 +654,7 @@ const LiveAvatarSessionComponent: React.FC<{
       }, 5000);
     } catch (error) {
       console.error("Error processing camera question:", error);
+      setShowVisionLoading(false);
       // Send a friendly error message - use repeat() to speak directly
       if (mode === "FULL") {
         await repeat("Oops! I had a little trouble analyzing what I'm seeing right now. Could you try asking again?");
@@ -656,8 +666,9 @@ const LiveAvatarSessionComponent: React.FC<{
     } finally {
       setIsProcessingCameraQuestion(false);
       setIsAnalyzingImage(false);
+      // Loading will be hidden when avatar starts talking (via useEffect) or already hidden above
     }
-  }, [isCameraActive, isProcessingCameraQuestion, mode, captureCameraFrame, cameraAvailable, fallbackImage, sessionRef, repeat]);
+  }, [isCameraActive, isProcessingCameraQuestion, visionMode, mode, captureCameraFrame, cameraAvailable, fallbackImage, sessionRef, repeat]);
 
   // Debug button handler
   const handleDebugAnalysis = useCallback(async () => {
@@ -778,6 +789,30 @@ const LiveAvatarSessionComponent: React.FC<{
     };
   }, [sessionRef, visionMode, processCameraQuestion]);
 
+  // Automatically trigger vision recognition when Go Live streaming mode is activated
+  useEffect(() => {
+    if (visionMode === 'streaming' && isCameraActive && !isProcessingCameraQuestion) {
+      // Wait a moment for camera to be ready, then analyze what's in view
+      const timeoutId = setTimeout(() => {
+        // Double-check conditions before triggering
+        if (visionMode === 'streaming' && isCameraActive && !isProcessingCameraQuestion) {
+          processCameraQuestion("", true);
+        }
+      }, 1000);
+      
+      return () => {
+        clearTimeout(timeoutId);
+      };
+    }
+  }, [visionMode, isCameraActive, isProcessingCameraQuestion, processCameraQuestion]);
+
+  // Hide loading text when avatar starts talking
+  useEffect(() => {
+    if (isAvatarTalking && showVisionLoading) {
+      setShowVisionLoading(false);
+    }
+  }, [isAvatarTalking, showVisionLoading]);
+
   // Automatically analyze and speak when camera mode is activated
   // DISABLED: This was causing automatic snap when camera opens on mobile
   // Users should manually trigger analysis by asking questions via voice
@@ -880,9 +915,6 @@ const LiveAvatarSessionComponent: React.FC<{
 
   
   const handleCameraClick = async () => {
-    // Trigger greeting on first button click (if not already triggered)
-    triggerGreetingIfNeeded();
-    
     if (visionMode === 'snapshot') {
       // Stop camera if already in snapshot mode
       if (cameraStream) {
@@ -993,9 +1025,6 @@ const LiveAvatarSessionComponent: React.FC<{
   };
 
   const handleFileUploadClick = (value: string) => {
-    // Trigger greeting on first button click (if not already triggered)
-    triggerGreetingIfNeeded();
-    
     // If video, handle video recording instead of file upload
     if (value === 'video') {
       handleVideoClick();
@@ -1009,8 +1038,6 @@ const LiveAvatarSessionComponent: React.FC<{
 
   // Handle video recording
   const handleVideoClick = async () => {
-    triggerGreetingIfNeeded();
-
     if (isVideoActive) {
       // Stop video recording if already active
       if (videoStream) {
@@ -1382,8 +1409,8 @@ const LiveAvatarSessionComponent: React.FC<{
 
   return (
     <div className="fixed inset-0 w-screen h-screen bg-black flex flex-col">
-      {/* Analyzing popup overlay */}
-      {(isAnalyzingImage || isAnalyzingVideo) && (
+      {/* Analyzing popup overlay - only show for snapshot mode, not streaming mode */}
+      {(isAnalyzingImage || isAnalyzingVideo) && visionMode !== 'streaming' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-70">
           <div className="bg-gray-800 text-white px-8 py-6 rounded-lg shadow-2xl">
             <p className="text-xl font-semibold text-center">
@@ -1392,10 +1419,18 @@ const LiveAvatarSessionComponent: React.FC<{
           </div>
         </div>
       )}
+      {/* Small non-blocking indicator for streaming mode */}
+      {(isAnalyzingImage || isProcessingCameraQuestion) && visionMode === 'streaming' && (
+        <div className="fixed top-20 right-4 z-50 bg-gray-800 bg-opacity-90 text-white px-4 py-2 rounded-lg shadow-lg">
+          <p className="text-sm font-medium">
+            🔄 Analyzing...
+          </p>
+        </div>
+      )}
 
       {/* Text overlays at the top */}
       <div className="absolute top-0 left-0 right-0 z-10 flex flex-col items-center pt-4 pb-2">
-        <h1 className="text-white text-2xl font-semibold">iSolveUrProblems.ai - beta</h1>
+        <h1 className="text-custom-green text-2xl font-semibold">iSolveUrProblems.ai - beta</h1>
         {microphoneWarning && (
           <div className="mt-4 bg-yellow-500 text-black px-4 py-2 rounded-md max-w-2xl text-center">
             <p className="font-semibold">⚠️ Warning: {microphoneWarning}</p>
@@ -1608,9 +1643,9 @@ const LiveAvatarSessionComponent: React.FC<{
           )} */}
 
           {/* Status text above buttons */}
-          {sessionState !== SessionState.DISCONNECTED && (
-            <div className="fixed bottom-[13rem] left-1/2 -translate-x-1/2 z-30">
-              <p className="text-white text-2xl font-semibold italic text-center drop-shadow-lg">
+          {sessionState !== SessionState.DISCONNECTED && visionMode !== 'streaming' && (
+            <div className="fixed bottom-[15rem] left-1/2 -translate-x-1/2 z-30">
+              <p className="text-custom-green text-2xl font-semibold text-center drop-shadow-lg">
                 {!isStreamReady ? (
                   <span className="inline-flex items-center">
                     Connecting
@@ -1619,6 +1654,18 @@ const LiveAvatarSessionComponent: React.FC<{
                 ) : (
                   "Ask Anything"
                 )}
+              </p>
+            </div>
+          )}
+
+          {/* Loading text for vision recognition in streaming mode */}
+          {showVisionLoading && visionMode === 'streaming' && (
+            <div className="fixed bottom-[15rem] left-1/2 -translate-x-1/2 z-30">
+              <p className="text-custom-green text-2xl font-semibold text-center drop-shadow-lg">
+                <span className="inline-flex items-center">
+                  Loading
+                  <span className="inline-block animate-pulse">....</span>
+                </span>
               </p>
             </div>
           )}
