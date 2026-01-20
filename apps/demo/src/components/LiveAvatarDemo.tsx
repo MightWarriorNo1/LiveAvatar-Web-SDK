@@ -7,6 +7,7 @@ export const LiveAvatarDemo = () => {
   const [sessionToken, setSessionToken] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isExited, setIsExited] = useState(false);
 
   useEffect(() => {
     // Automatically start FULL mode session on mount
@@ -36,36 +37,44 @@ export const LiveAvatarDemo = () => {
   }, []);
 
   const onSessionStopped = () => {
-    // Reset the FE state
-    setSessionToken("");
-    // Automatically restart session
-    const startSession = async () => {
-      try {
-        setIsLoading(true);
-        const res = await fetch("/api/start-session", {
-      method: "POST",
-    });
-    if (!res.ok) {
-      const error = await res.json();
-      setError(error.error);
-          setIsLoading(false);
-      return;
-    }
-    const { session_token } = await res.json();
-    setSessionToken(session_token);
-        setIsLoading(false);
-      } catch (error: unknown) {
-        setError((error as Error).message);
-        setIsLoading(false);
+    // Only restart if not exited (user didn't click Stop to exit)
+    if (!isExited) {
+      // Reset the FE state
+      setSessionToken("");
+      // Automatically restart session
+      const startSession = async () => {
+        try {
+          setIsLoading(true);
+          const res = await fetch("/api/start-session", {
+        method: "POST",
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        setError(error.error);
+            setIsLoading(false);
+        return;
       }
-    };
-    startSession();
+      const { session_token } = await res.json();
+      setSessionToken(session_token);
+          setIsLoading(false);
+        } catch (error: unknown) {
+          setError((error as Error).message);
+          setIsLoading(false);
+        }
+      };
+      startSession();
+    }
+  };
+
+  const handleExit = () => {
+    setIsExited(true);
+    setSessionToken("");
   };
 
   if (isLoading) {
     return (
       <div className="w-full h-full flex flex-col items-center justify-center gap-4">
-        <div className="text-white text-xl">Connecting...</div>
+        <div className="text-white text-xl">Loading...</div>
       </div>
     );
   }
@@ -80,11 +89,21 @@ export const LiveAvatarDemo = () => {
     );
   }
 
+  if (isExited) {
+    return (
+      <div className="w-full h-full flex flex-col items-center justify-center gap-4 bg-black">
+        <div className="text-white text-2xl font-semibold">Session Ended</div>
+        <div className="text-gray-400 text-lg">Thank you for using iSolveUrProblems.ai</div>
+      </div>
+    );
+  }
+
   return (
         <LiveAvatarSession
       mode="FULL"
           sessionAccessToken={sessionToken}
           onSessionStopped={onSessionStopped}
+          onExit={handleExit}
         />
   );
 };

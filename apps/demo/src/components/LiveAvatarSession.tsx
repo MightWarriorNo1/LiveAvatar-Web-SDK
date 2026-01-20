@@ -32,7 +32,8 @@ const Button: React.FC<{
 const LiveAvatarSessionComponent: React.FC<{
   mode: "FULL" | "CUSTOM";
   onSessionStopped: () => void;
-}> = ({ mode, onSessionStopped }) => {
+  onExit?: () => void;
+}> = ({ mode, onSessionStopped, onExit }) => {
   const [message, setMessage] = useState("");
   const {
     sessionState,
@@ -85,6 +86,7 @@ const LiveAvatarSessionComponent: React.FC<{
   const [uploadType, setUploadType] = useState<string>('image');
   const isAttachedRef = useRef<boolean>(false);
   const greetingTriggeredRef = useRef<boolean>(false);
+  const audioUnlockedRef = useRef<boolean>(false);
   
   // Vision mode state: 'streaming' for Go Live, 'snapshot' for Camera button, null for inactive
   const [visionMode, setVisionMode] = useState<'streaming' | 'snapshot' | null>(null);
@@ -159,23 +161,59 @@ const LiveAvatarSessionComponent: React.FC<{
   // Wrapper for stopSession - ends session on home screen, resets to home screen otherwise
   const handleStopSession = useCallback(() => {
     if (isOnHomeScreen()) {
-      // On home screen: end the session
+      // On home screen: exit the app
       greetingTriggeredRef.current = false; // Reset greeting trigger
       stopSession();
+      // Call onExit callback if provided (to exit app instead of restarting)
+      if (onExit) {
+        onExit();
+      }
     } else {
       // Not on home screen: reset to home screen (keep session)
       resetToHomeScreen();
     }
-  }, [isOnHomeScreen, resetToHomeScreen, stopSession]);
+  }, [isOnHomeScreen, resetToHomeScreen, stopSession, onExit]);
+
+  // Function to unlock audio on Android (requires user interaction)
+  const unlockAudio = useCallback(async () => {
+    if (audioUnlockedRef.current || !videoRef.current) {
+      return;
+    }
+
+    const video = videoRef.current;
+    try {
+      // Explicitly play the video to unlock audio on mobile browsers
+      await video.play();
+      video.volume = 1.0;
+      video.muted = false;
+      
+      // Ensure audio tracks are enabled
+      if (video.srcObject && video.srcObject instanceof MediaStream) {
+        video.srcObject.getAudioTracks().forEach(track => {
+          track.enabled = true;
+        });
+      }
+      
+      audioUnlockedRef.current = true;
+      console.log("Audio unlocked successfully");
+    } catch (error) {
+      console.warn("Failed to unlock audio:", error);
+      // Audio might still be blocked, but we'll try again on next interaction
+    }
+  }, []);
 
   useEffect(() => {
     // console.log("isStreamReady: ", isStreamReady);
     // console.log("videoRef.current: ", videoRef.current);
     if (isStreamReady && videoRef.current) {
       attachElement(videoRef.current);
+      // Try to unlock audio if already unlocked (for cases where stream becomes ready after user interaction)
+      if (audioUnlockedRef.current) {
+        unlockAudio();
+      }
       // console.log("attached element");
     }
-  }, [attachElement, isStreamReady]);
+  }, [attachElement, isStreamReady, unlockAudio]);
 
   // Ensure video has volume and is not muted whenever video element is available
   useEffect(() => {
@@ -191,6 +229,34 @@ const LiveAvatarSessionComponent: React.FC<{
       }
     }
   }, [isStreamReady]);
+
+  // Add user interaction listeners to unlock audio on first interaction
+  useEffect(() => {
+    if (audioUnlockedRef.current) {
+      return;
+    }
+
+    const handleUserInteraction = async () => {
+      await unlockAudio();
+      // Remove listeners after first successful unlock
+      if (audioUnlockedRef.current) {
+        document.removeEventListener('click', handleUserInteraction);
+        document.removeEventListener('touchstart', handleUserInteraction);
+        document.removeEventListener('touchend', handleUserInteraction);
+      }
+    };
+
+    // Listen for various user interaction events
+    document.addEventListener('click', handleUserInteraction, { once: true, passive: true });
+    document.addEventListener('touchstart', handleUserInteraction, { once: true, passive: true });
+    document.addEventListener('touchend', handleUserInteraction, { once: true, passive: true });
+
+    return () => {
+      document.removeEventListener('click', handleUserInteraction);
+      document.removeEventListener('touchstart', handleUserInteraction);
+      document.removeEventListener('touchend', handleUserInteraction);
+    };
+  }, [unlockAudio]);
 
   // Function to trigger greeting on first button click (only once, only if video is ready)
   const triggerGreetingIfNeeded = useCallback(() => {
@@ -1664,12 +1730,16 @@ const LiveAvatarSessionComponent: React.FC<{
           {/* Status text above buttons */}
           {sessionState !== SessionState.DISCONNECTED && visionMode !== 'streaming' && (
             <div className="fixed bottom-[15rem] left-1/2 -translate-x-1/2 z-30">
-              <p className="text-custom-green text-2xl font-semibold text-center drop-shadow-lg">
+              <p className={`text-custom-green text-2xl font-semibold text-center drop-shadow-lg ${
+                isStreamReady && !isAvatarTalking ? 'animate-fade-opacity' : ''
+              }`}>
                 {!isStreamReady ? (
                   <span className="inline-flex items-center">
-                    Connecting
+                    Loading
                     <span className="inline-block animate-pulse">...</span>
                   </span>
+                ) : isAvatarTalking ? (
+                  "Talk to Interrupt 6"
                 ) : (
                   "Ask Anything"
                 )}
@@ -1699,21 +1769,43 @@ const LiveAvatarSessionComponent: React.FC<{
           )}
 
           {/* ss added */}
-          <div className="fixed bottom-[4rem] left-1/2 -translate-x-1/2 bg-[#00000057] w-[95%] max-w-7xl text-white rounded-lg shadow-lg p-4">
+          <div className="fixed bottom-[4rem] left-1/2 -translate-x-1/2 w-[95%] max-w-7xl p-4">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <button 
                 className="bg-gray-800 p-3 rounded-lg flex items-center justify-center text-lg font-medium text-custom-green whitespace-nowrap"
-                onClick={handleGoLive}
+                onClick={async () => {
+                  await unlockAudio();
+                  handleGoLive();
+                }}
               >
                 <Radio className="mr-2 w-5 h-5" /> Go Live
               </button>
-              <button className="bg-gray-800 p-3 rounded-lg flex items-center justify-center text-lg font-medium text-custom-green whitespace-nowrap" onClick={handleCameraClick}>
+              <button 
+                className="bg-gray-800 p-3 rounded-lg flex items-center justify-center text-lg font-medium text-custom-green whitespace-nowrap" 
+                onClick={async () => {
+                  await unlockAudio();
+                  handleCameraClick();
+                }}
+              >
                 <Camera className="mr-2 w-5 h-5" /> Camera
               </button>
-              <button className="bg-gray-800 p-3 rounded-lg flex items-center justify-center text-lg font-medium text-custom-green whitespace-nowrap" onClick={() => {handleFileUploadClick('image')}}>
+              {/* On wider screens (md and up), swap Gallery and Video positions */}
+              <button 
+                className="bg-gray-800 p-3 rounded-lg flex items-center justify-center text-lg font-medium text-custom-green whitespace-nowrap order-3 md:order-4" 
+                onClick={async () => {
+                  await unlockAudio();
+                  handleFileUploadClick('image');
+                }}
+              >
                 <ImageIcon className="mr-2 w-5 h-5" /> Gallery
               </button>
-              <button className="bg-gray-800 p-3 rounded-lg flex items-center justify-center text-lg font-medium text-custom-green whitespace-nowrap" onClick={() => {handleFileUploadClick('video')}}>
+              <button 
+                className="bg-gray-800 p-3 rounded-lg flex items-center justify-center text-lg font-medium text-custom-green whitespace-nowrap order-4 md:order-3" 
+                onClick={async () => {
+                  await unlockAudio();
+                  handleFileUploadClick('video');
+                }}
+              >
                 <Video className="mr-2 w-5 h-5" />Video
               </button>
             </div>
@@ -1732,7 +1824,11 @@ const LiveAvatarSessionComponent: React.FC<{
         <div className="flex justify-center">
           <button
             className="bg-gray-800 p-3 rounded-lg flex items-center justify-center text-xl font-medium text-custom-green whitespace-nowrap w-1/4 md:w-[12.5%]"
-            onClick={handleStopSession}
+            onClick={async () => {
+              // Unlock audio on button click (user interaction)
+              await unlockAudio();
+              handleStopSession();
+            }}
           >
             Stop
           </button>
@@ -1746,12 +1842,14 @@ export const LiveAvatarSession: React.FC<{
   mode: "FULL" | "CUSTOM";
   sessionAccessToken: string;
   onSessionStopped: () => void;
-}> = ({ mode, sessionAccessToken, onSessionStopped }) => {
+  onExit?: () => void;
+}> = ({ mode, sessionAccessToken, onSessionStopped, onExit }) => {
   return (
     <LiveAvatarContextProvider sessionAccessToken={sessionAccessToken}>
       <LiveAvatarSessionComponent
         mode={mode}
         onSessionStopped={onSessionStopped}
+        onExit={onExit}
       />
     </LiveAvatarContextProvider>
   );
