@@ -209,10 +209,13 @@ const LiveAvatarSessionComponent: React.FC<{
 
     const video = videoRef.current;
     try {
-      // Explicitly play the video to unlock audio on mobile browsers
-      await video.play();
+      // For Android: explicitly play the video to unlock audio on mobile browsers
+      // Set volume to max and unmute
       video.volume = 1.0;
       video.muted = false;
+      
+      // Try to play the video
+      await video.play();
 
       // Ensure audio tracks are enabled
       if (video.srcObject && video.srcObject instanceof MediaStream) {
@@ -222,7 +225,18 @@ const LiveAvatarSessionComponent: React.FC<{
       }
 
       audioUnlockedRef.current = true;
-      console.log("Audio unlocked successfully");
+      console.log("Audio unlocked successfully for Android/mobile");
+      
+      // Force a second attempt after a short delay for stubborn Android devices
+      setTimeout(() => {
+        if (videoRef.current) {
+          videoRef.current.volume = 1.0;
+          videoRef.current.muted = false;
+          videoRef.current.play().catch(() => {
+            // Ignore errors on second attempt
+          });
+        }
+      }, 100);
     } catch (error) {
       console.warn("Failed to unlock audio:", error);
       // Audio might still be blocked, but we'll try again on next interaction
@@ -233,7 +247,21 @@ const LiveAvatarSessionComponent: React.FC<{
     // console.log("isStreamReady: ", isStreamReady);
     // console.log("videoRef.current: ", videoRef.current);
     if (isStreamReady && videoRef.current) {
+      // Ensure video is muted initially to prevent mouth movement during loading
+      const video = videoRef.current;
+      video.muted = true;
+      video.volume = 0;
+      
       attachElement(videoRef.current);
+      
+      // Unmute after a short delay once stream is attached and user has interacted
+      setTimeout(() => {
+        if (audioUnlockedRef.current && videoRef.current) {
+          videoRef.current.muted = false;
+          videoRef.current.volume = 1.0;
+        }
+      }, 500);
+      
       // Try to unlock audio if already unlocked (for cases where stream becomes ready after user interaction)
       if (audioUnlockedRef.current) {
         unlockAudio();
@@ -243,8 +271,9 @@ const LiveAvatarSessionComponent: React.FC<{
   }, [attachElement, isStreamReady, unlockAudio]);
 
   // Ensure video has volume and is not muted whenever video element is available
+  // Only unmute after user interaction (audio unlock)
   useEffect(() => {
-    if (videoRef.current) {
+    if (videoRef.current && isStreamReady && audioUnlockedRef.current) {
       const video = videoRef.current;
       video.volume = 1.0;
       video.muted = false;
@@ -257,7 +286,21 @@ const LiveAvatarSessionComponent: React.FC<{
     }
   }, [isStreamReady]);
 
+  // Auto-unlock audio on mount for Android (try immediately, then on user interaction)
+  useEffect(() => {
+    // Try to unlock audio immediately on mount (for Android)
+    if (isStreamReady && videoRef.current) {
+      // Small delay to ensure video element is ready
+      setTimeout(() => {
+        unlockAudio().catch(() => {
+          // If auto-unlock fails, wait for user interaction
+        });
+      }, 500);
+    }
+  }, [isStreamReady, unlockAudio]);
+
   // Add user interaction listeners to unlock audio on first interaction
+  // Critical for Android devices to enable audio playback
   useEffect(() => {
     if (audioUnlockedRef.current) {
       return;
@@ -270,20 +313,22 @@ const LiveAvatarSessionComponent: React.FC<{
         document.removeEventListener("click", handleUserInteraction);
         document.removeEventListener("touchstart", handleUserInteraction);
         document.removeEventListener("touchend", handleUserInteraction);
+        document.removeEventListener("pointerdown", handleUserInteraction);
       }
     };
 
-    // Listen for various user interaction events
+    // Listen for various user interaction events - especially important for Android
     document.addEventListener("click", handleUserInteraction, {
-      once: true,
       passive: true,
     });
     document.addEventListener("touchstart", handleUserInteraction, {
-      once: true,
       passive: true,
     });
     document.addEventListener("touchend", handleUserInteraction, {
-      once: true,
+      passive: true,
+    });
+    // Add pointer events for better Android support
+    document.addEventListener("pointerdown", handleUserInteraction, {
       passive: true,
     });
 
@@ -291,22 +336,15 @@ const LiveAvatarSessionComponent: React.FC<{
       document.removeEventListener("click", handleUserInteraction);
       document.removeEventListener("touchstart", handleUserInteraction);
       document.removeEventListener("touchend", handleUserInteraction);
+      document.removeEventListener("pointerdown", handleUserInteraction);
     };
   }, [unlockAudio]);
 
-  // Function to trigger greeting on first button click (only once, only if video is ready)
+  // DISABLED: Function to trigger greeting - removed to prevent automatic "Hi" on load
+  // Greeting should only happen on explicit user action, not automatically
   const triggerGreetingIfNeeded = useCallback(() => {
-    if (
-      mode === "FULL" &&
-      isStreamReady &&
-      !greetingTriggeredRef.current &&
-      sessionRef.current
-    ) {
-      greetingTriggeredRef.current = true;
-      // Send trigger message to start greeting
-      sessionRef.current.message("Please greet the user now");
-    }
-  }, [mode, isStreamReady, sessionRef]);
+    // Do nothing - greeting disabled to prevent mouth movement during loading
+  }, []);
 
   // Function to load fallback image from public folder
   const loadFallbackImage = useCallback(async (): Promise<File> => {
@@ -598,6 +636,8 @@ const LiveAvatarSessionComponent: React.FC<{
 
     try {
       setIsAnalyzingImage(true);
+      // Show "Analyzing" immediately (not "Loading")
+      setIsProcessingCameraQuestion(true);
 
       // Capture frame from camera or use fallback image
       const frameFile = await captureCameraFrame();
@@ -630,10 +670,10 @@ const LiveAvatarSessionComponent: React.FC<{
       // Analyze the photo
       const formData = new FormData();
       formData.append("image", frameFile);
-      formData.append(
-        "question",
-        "What can you see in this image? Please describe everything you see with enthusiasm and humor!",
-      );
+        formData.append(
+          "question",
+          "Describe what you see briefly",
+        );
 
       const response = await fetch("/api/analyze-image", {
         method: "POST",
@@ -649,17 +689,17 @@ const LiveAvatarSessionComponent: React.FC<{
       const analysis = data.analysis;
       setImageAnalysis(analysis);
 
-      // Store analysis as context for future questions, but ask short question
-      if (mode === "FULL" && sessionRef.current) {
-        // Send analysis as context to AI so it knows what's in the image
-        const contextMessage = `The user has shared an image with you. You can see this image clearly, and here's what you observe: ${analysis}. When the user asks about what they're seeing or asks questions about the image, respond as if you're directly viewing it. Describe what you see naturally and confidently - you have full visibility of the image.`;
-        sessionRef.current.message(contextMessage);
+        // Store analysis as context for future questions, but ask short question
+        if (mode === "FULL" && sessionRef.current) {
+          // Send analysis as context to AI so it knows what's in the image
+          const contextMessage = `Image context: ${analysis}. When user asks about the image, respond briefly (1-2 sentences).`;
+          sessionRef.current.message(contextMessage);
 
-        // Ask short question instead of full analysis
-        await repeat(
-          "What problems can I help you solve that are in this picture?",
-        );
-      }
+          // Ask ONLY the short question without any preamble
+          await repeat(
+            "What problems can I help you solve that are in this picture?",
+          );
+        }
 
       setIsAnalyzingImage(false);
     } catch (error) {
@@ -714,7 +754,8 @@ const LiveAvatarSessionComponent: React.FC<{
       // Skip if already processing (use ref for immediate check to prevent race conditions)
       // Note: We allow processing if isDebugProcessingRef is set by the current call
       // The check is done in handleDebugAnalysis before calling this function
-      if (isProcessingCameraQuestion) {
+      // BUT: Allow processing if skipDuplicateCheck is true (for initial vision recognition)
+      if (isProcessingCameraQuestion && !skipDuplicateCheck) {
         console.log("Already processing, skipping duplicate request");
         return;
       }
@@ -737,14 +778,8 @@ const LiveAvatarSessionComponent: React.FC<{
       console.log("Processing question with camera frame analysis...");
       setIsProcessingCameraQuestion(true);
       setIsAnalyzingImage(true);
-      // Show loading text for vision recognition in streaming mode (initial recognition)
-      if (
-        visionMode === "streaming" &&
-        userText.length === 0 &&
-        skipDuplicateCheck
-      ) {
-        setShowVisionLoading(true);
-      }
+      // Don't show loading text - we'll only show "Analyzing" via isProcessingCameraQuestion
+      // Removed setShowVisionLoading(true) to prevent flashing text
       lastProcessedQuestionRef.current = userText;
 
       try {
@@ -796,26 +831,28 @@ const LiveAvatarSessionComponent: React.FC<{
         console.log("Analysis received:", analysis.substring(0, 100) + "...");
         setImageAnalysis(analysis);
 
-        // For initial recognition (empty question with skipDuplicateCheck), append the specific message
-        let responseMessage = analysis;
-        if (userText.length === 0 && skipDuplicateCheck) {
-          // This is initial recognition when Go Live starts - append the specific question
-          responseMessage =
-            analysis +
-            " What problems can I help you solve that we're looking at today?";
-        }
+      // For initial recognition (empty question with skipDuplicateCheck), use ONLY the specific message
+      let responseMessage: string;
+      if (userText.length === 0 && skipDuplicateCheck) {
+        // This is initial recognition when Go Live starts - use ONLY the specific question, no analysis
+        responseMessage = "What problems can I help you solve that we're looking at right now?";
+      } else {
+        // For user questions, just use the analysis (which is now concise from API)
+        responseMessage = analysis;
+      }
 
         // Store the response to filter out avatar transcriptions later
         lastAvatarResponseRef.current = responseMessage.substring(0, 100); // Store first 100 chars for comparison
 
-        // Hide loading when we start sending response to avatar
-        setShowVisionLoading(false);
+        // Hide loading is handled by isProcessingCameraQuestion state
 
         // Send the response to the avatar - use repeat() to speak directly without AI processing
+        // IMPORTANT: Use repeat() which speaks directly without AI processing to prevent monologuing
         if (mode === "FULL") {
-          console.log("Sending response to avatar using repeat()");
-          // Use repeat() to make avatar speak the analysis directly without AI processing
+          console.log("Sending response to avatar using repeat() - direct speech only");
+          // Use repeat() to make avatar speak ONLY this message, no AI processing = no monologue
           await repeat(responseMessage);
+          // After speaking, do NOT send any additional messages to prevent continued talking
         }
 
         // Reset the last processed question after a delay to allow the same question to be asked again later
@@ -824,7 +861,6 @@ const LiveAvatarSessionComponent: React.FC<{
         }, 5000);
       } catch (error) {
         console.error("Error processing camera question:", error);
-        setShowVisionLoading(false);
         // Send a friendly error message - use repeat() to speak directly
         if (mode === "FULL") {
           await repeat(
@@ -1032,6 +1068,7 @@ const LiveAvatarSessionComponent: React.FC<{
       !isProcessingCameraQuestion
     ) {
       // Wait a moment for camera to be ready, then analyze what's in view
+      // The "Analyzing" text will show when processCameraQuestion sets isProcessingCameraQuestion to true
       const timeoutId = setTimeout(() => {
         // Double-check conditions before triggering
         if (
@@ -1046,6 +1083,9 @@ const LiveAvatarSessionComponent: React.FC<{
       return () => {
         clearTimeout(timeoutId);
       };
+    } else if (visionMode !== "streaming" && !isCameraActive) {
+      // Reset processing state when vision mode is deactivated
+      setIsProcessingCameraQuestion(false);
     }
   }, [
     visionMode,
@@ -1396,10 +1436,10 @@ const LiveAvatarSessionComponent: React.FC<{
         // For FULL mode, send the analysis as context to the AI
         if (mode === "FULL" && sessionRef.current) {
           // Send analysis as context to AI so it knows what's in the video
-          const contextMessage = `The user has shared a video with you. You can see this video clearly, and here's what you observe: ${data.analysis}. When the user asks about what they're seeing or asks questions about the video, respond as if you're directly viewing it. Describe what you see naturally and confidently - you have full visibility of the video.`;
+          const contextMessage = `Video context: ${data.analysis}. When user asks about the video, respond briefly (1-2 sentences).`;
           sessionRef.current.message(contextMessage);
 
-          // Ask short question instead of full analysis
+          // Ask ONLY the short question
           await repeat(
             "What problems can I help you solve that are in this video?",
           );
@@ -1582,19 +1622,21 @@ const LiveAvatarSessionComponent: React.FC<{
         // For FULL mode, send the analysis as context to the AI
         if (mode === "FULL" && sessionRef.current) {
           // Send analysis as context to AI so it knows what's in the image
-          const contextMessage = `The user has shared an image with you. You can see this image clearly, and here's what you observe: ${data.analysis}. When the user asks about what they're seeing or asks questions about the image, respond as if you're directly viewing it. Describe what you see naturally and confidently - you have full visibility of the image.`;
+          const contextMessage = `Image context: ${data.analysis}. When user asks about the image, respond briefly (1-2 sentences).`;
           sessionRef.current.message(contextMessage);
 
-          // Ask short question instead of full analysis
+          // Ask ONLY the short question using repeat() - direct speech, no AI processing = no monologue
           await repeat(
             "What problems can I help you solve that are in this picture?",
           );
+          // Do NOT send any additional messages - just the one line
         }
       } catch (error) {
         console.error("Error analyzing image:", error);
         alert("Failed to analyze image. Please try again.");
       } finally {
         setIsAnalyzingImage(false);
+        setIsProcessingCameraQuestion(false);
       }
     } else if (isVideo) {
       setIsAnalyzingVideo(true);
@@ -1621,10 +1663,10 @@ const LiveAvatarSessionComponent: React.FC<{
         // For FULL mode, send the analysis as context to the AI
         if (mode === "FULL" && sessionRef.current) {
           // Send analysis as context to AI so it knows what's in the video
-          const contextMessage = `The user has shared a video with you. You can see this video clearly, and here's what you observe: ${data.analysis}. When the user asks about what they're seeing or asks questions about the video, respond as if you're directly viewing it. Describe what you see naturally and confidently - you have full visibility of the video.`;
+          const contextMessage = `Video context: ${data.analysis}. When user asks about the video, respond briefly (1-2 sentences).`;
           sessionRef.current.message(contextMessage);
 
-          // Ask short question instead of full analysis
+          // Ask ONLY the short question
           await repeat(
             "What problems can I help you solve that are in this video?",
           );
@@ -1721,7 +1763,7 @@ const LiveAvatarSessionComponent: React.FC<{
           autoPlay // Native autoplay
           playsInline
           preload="auto"
-          muted={false}
+          muted={true} // Start muted to prevent mouth movement during loading
           className={`${
             isCameraActive || isVideoActive
               ? "absolute top-24 left-4 w-24 h-44 object-contain z-20 rounded-lg border-2 border-white shadow-2xl"
@@ -1907,10 +1949,12 @@ const LiveAvatarSessionComponent: React.FC<{
             </button>
           )} */}
 
-          {/* Status text above buttons */}
+          {/* Status text above buttons - positioned just above Stop button */}
           {sessionState !== SessionState.DISCONNECTED &&
-            visionMode !== "streaming" && (
-              <div className="fixed bottom-[15rem] left-1/2 -translate-x-1/2 z-30">
+            visionMode !== "streaming" &&
+            !isCameraActive &&
+            !isVideoActive && (
+              <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-30">
                 <p
                   className={`text-custom-green text-2xl font-semibold text-center drop-shadow-lg ${
                     isStreamReady && !isAvatarTalking
@@ -1918,13 +1962,8 @@ const LiveAvatarSessionComponent: React.FC<{
                       : ""
                   }`}
                 >
-                  {!isStreamReady ? (
-                    <span className="inline-flex items-center">
-                      Loading
-                      <span className="inline-block animate-pulse">...</span>
-                    </span>
-                  ) : isAvatarTalking ? (
-                    "Talk to Interrupt 6"
+                  {isAvatarTalking ? (
+                    "Talk to Interrupt"
                   ) : (
                     "Ask Anything"
                   )}
@@ -1932,25 +1971,13 @@ const LiveAvatarSessionComponent: React.FC<{
               </div>
             )}
 
-          {/* Loading/Analyzing text for vision recognition in streaming mode */}
-          {(showVisionLoading ||
-            isAnalyzingImage ||
-            isProcessingCameraQuestion) &&
-            visionMode === "streaming" && (
-              <div className="fixed bottom-[15rem] left-1/2 -translate-x-1/2 z-30">
+          {/* Analyzing text for vision recognition in streaming mode - show when vision mode is active */}
+          {visionMode === "streaming" && (
+              <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-30">
                 <p className="text-custom-green text-2xl font-semibold text-center drop-shadow-lg">
                   <span className="inline-flex items-center">
-                    {showVisionLoading ? (
-                      <>
-                        Loading
-                        <span className="inline-block animate-pulse">....</span>
-                      </>
-                    ) : (
-                      <>
-                        Analyzing
-                        <span className="inline-block animate-pulse">...</span>
-                      </>
-                    )}
+                    Analyzing
+                    <span className="inline-block animate-pulse">...</span>
                   </span>
                 </p>
               </div>
@@ -1977,18 +2004,9 @@ const LiveAvatarSessionComponent: React.FC<{
               >
                 <Camera className="mr-2 w-5 h-5" /> Camera
               </button>
-              {/* On wider screens (md and up), swap Gallery and Video positions */}
+              {/* Video button in 3rd position, Gallery in 4th */}
               <button
-                className="bg-gray-800 p-3 rounded-lg flex items-center justify-center text-lg font-medium text-custom-green whitespace-nowrap order-3 md:order-4"
-                onClick={async () => {
-                  await unlockAudio();
-                  handleFileUploadClick("image");
-                }}
-              >
-                <ImageIcon className="mr-2 w-5 h-5" /> Gallery
-              </button>
-              <button
-                className="bg-gray-800 p-3 rounded-lg flex items-center justify-center text-lg font-medium text-custom-green whitespace-nowrap order-4 md:order-3"
+                className="bg-gray-800 p-3 rounded-lg flex items-center justify-center text-lg font-medium text-custom-green whitespace-nowrap"
                 onClick={async () => {
                   await unlockAudio();
                   handleFileUploadClick("video");
@@ -1996,6 +2014,15 @@ const LiveAvatarSessionComponent: React.FC<{
               >
                 <Video className="mr-2 w-5 h-5" />
                 Video
+              </button>
+              <button
+                className="bg-gray-800 p-3 rounded-lg flex items-center justify-center text-lg font-medium text-custom-green whitespace-nowrap"
+                onClick={async () => {
+                  await unlockAudio();
+                  handleFileUploadClick("image");
+                }}
+              >
+                <ImageIcon className="mr-2 w-5 h-5" /> Gallery
               </button>
             </div>
           </div>
