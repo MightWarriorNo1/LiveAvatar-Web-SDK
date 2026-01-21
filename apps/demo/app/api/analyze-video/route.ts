@@ -6,12 +6,15 @@ export async function POST(request: Request) {
     const { frames } = body;
 
     if (!frames || !Array.isArray(frames) || frames.length === 0) {
-      return new Response(JSON.stringify({ error: "Video frames are required" }), {
-        status: 400,
-        headers: {
-          "Content-Type": "application/json",
+      return new Response(
+        JSON.stringify({ error: "Video frames are required" }),
+        {
+          status: 400,
+          headers: {
+            "Content-Type": "application/json",
+          },
         },
-      });
+      );
     }
 
     if (!GROKAI_API_KEY) {
@@ -59,7 +62,7 @@ export async function POST(request: Request) {
             content: content,
           },
         ],
-        max_tokens: 1500,
+        max_tokens: 400,
       }),
     });
 
@@ -91,15 +94,11 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error("Error analyzing video:", error);
-    return new Response(
-      JSON.stringify({ error: "Failed to analyze video" }),
-      {
-        status: 500,
-        headers: {
-          "Content-Type": "application/json",
-        },
+    return new Response(JSON.stringify({ error: "Failed to analyze video" }), {
+      status: 500,
+      headers: {
+        "Content-Type": "application/json",
       },
-    );
+    });
   }
 }
-

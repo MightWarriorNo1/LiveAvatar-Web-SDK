@@ -11,7 +11,7 @@ export const useTextChat = (mode: "FULL" | "CUSTOM") => {
       } else if (mode === "CUSTOM") {
         const response = await fetch("/api/openai-chat-complete", {
           method: "POST",
-          body: JSON.stringify({ 
+          body: JSON.stringify({
             message,
             image_analysis: imageAnalysis || undefined,
           }),

@@ -12,26 +12,26 @@ export const LiveAvatarDemo = () => {
   useEffect(() => {
     // Automatically start FULL mode session on mount
     const startSession = async () => {
-    try {
+      try {
         setIsLoading(true);
-      const res = await fetch("/api/start-session", {
-        method: "POST",
-      });
-      console.log("RESPONSE", res);
-      if (!res.ok) {
-        const error = await res.json();
-        setError(error.error);
+        const res = await fetch("/api/start-session", {
+          method: "POST",
+        });
+        console.log("RESPONSE", res);
+        if (!res.ok) {
+          const error = await res.json();
+          setError(error.error);
           setIsLoading(false);
-        return;
+          return;
+        }
+        const { session_token } = await res.json();
+        setSessionToken(session_token);
+        setIsLoading(false);
+      } catch (error: unknown) {
+        setError((error as Error).message);
+        setIsLoading(false);
       }
-      const { session_token } = await res.json();
-      setSessionToken(session_token);
-        setIsLoading(false);
-    } catch (error: unknown) {
-      setError((error as Error).message);
-        setIsLoading(false);
-    }
-  };
+    };
 
     startSession();
   }, []);
@@ -46,16 +46,16 @@ export const LiveAvatarDemo = () => {
         try {
           setIsLoading(true);
           const res = await fetch("/api/start-session", {
-        method: "POST",
-      });
-      if (!res.ok) {
-        const error = await res.json();
-        setError(error.error);
+            method: "POST",
+          });
+          if (!res.ok) {
+            const error = await res.json();
+            setError(error.error);
             setIsLoading(false);
-        return;
-      }
-      const { session_token } = await res.json();
-      setSessionToken(session_token);
+            return;
+          }
+          const { session_token } = await res.json();
+          setSessionToken(session_token);
           setIsLoading(false);
         } catch (error: unknown) {
           setError((error as Error).message);
@@ -80,11 +80,11 @@ export const LiveAvatarDemo = () => {
   }
 
   if (error) {
-  return (
-    <div className="w-full h-full flex flex-col items-center justify-center gap-4">
-            <div className="text-red-500">
-              {"Error getting session token: " + error}
-            </div>
+    return (
+      <div className="w-full h-full flex flex-col items-center justify-center gap-4">
+        <div className="text-red-500">
+          {"Error getting session token: " + error}
+        </div>
       </div>
     );
   }
@@ -93,17 +93,19 @@ export const LiveAvatarDemo = () => {
     return (
       <div className="w-full h-full flex flex-col items-center justify-center gap-4 bg-black">
         <div className="text-white text-2xl font-semibold">Session Ended</div>
-        <div className="text-gray-400 text-lg">Thank you for using iSolveUrProblems.ai</div>
+        <div className="text-gray-400 text-lg">
+          Thank you for using iSolveUrProblems.ai
+        </div>
       </div>
     );
   }
 
   return (
-        <LiveAvatarSession
+    <LiveAvatarSession
       mode="FULL"
-          sessionAccessToken={sessionToken}
-          onSessionStopped={onSessionStopped}
-          onExit={handleExit}
-        />
+      sessionAccessToken={sessionToken}
+      onSessionStopped={onSessionStopped}
+      onExit={handleExit}
+    />
   );
 };

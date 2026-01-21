@@ -84,7 +84,9 @@ const useVoiceChatState = (sessionRef: React.RefObject<LiveAvatarSession>) => {
   const [voiceChatState, setVoiceChatState] = useState<VoiceChatState>(
     sessionRef.current?.voiceChat.state || VoiceChatState.INACTIVE,
   );
-  const [microphoneWarning, setMicrophoneWarning] = useState<string | null>(null);
+  const [microphoneWarning, setMicrophoneWarning] = useState<string | null>(
+    null,
+  );
 
   useEffect(() => {
     if (sessionRef.current) {
@@ -98,9 +100,12 @@ const useVoiceChatState = (sessionRef: React.RefObject<LiveAvatarSession>) => {
         VoiceChatEvent.STATE_CHANGED,
         setVoiceChatState,
       );
-      sessionRef.current.voiceChat.on(VoiceChatEvent.WARNING, (message: string) => {
-        setMicrophoneWarning(message);
-      });
+      sessionRef.current.voiceChat.on(
+        VoiceChatEvent.WARNING,
+        (message: string) => {
+          setMicrophoneWarning(message);
+        },
+      );
     }
   }, [sessionRef]);
 
@@ -196,7 +201,8 @@ export const LiveAvatarContextProvider = ({
   const { sessionState, isStreamReady, connectionQuality } =
     useSessionState(sessionRef);
 
-  const { isMuted, voiceChatState, microphoneWarning } = useVoiceChatState(sessionRef);
+  const { isMuted, voiceChatState, microphoneWarning } =
+    useVoiceChatState(sessionRef);
   const { isUserTalking, isAvatarTalking } = useTalkingState(sessionRef);
   // const { messages } = useChatHistoryState(sessionRef);
 

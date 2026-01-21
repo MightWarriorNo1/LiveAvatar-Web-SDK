@@ -71,11 +71,14 @@ const LiveAvatarSessionComponent: React.FC<{
   const [imageAnalysis, setImageAnalysis] = useState<string | null>(null);
   const [isAnalyzingImage, setIsAnalyzingImage] = useState(false);
   const [isAnalyzingVideo, setIsAnalyzingVideo] = useState(false);
-  const [isProcessingCameraQuestion, setIsProcessingCameraQuestion] = useState(false);
+  const [isProcessingCameraQuestion, setIsProcessingCameraQuestion] =
+    useState(false);
   const [showVisionLoading, setShowVisionLoading] = useState(false);
   const [cameraAvailable, setCameraAvailable] = useState<boolean | null>(null);
   const [fallbackImage, setFallbackImage] = useState<File | null>(null);
-  const [fallbackImagePreview, setFallbackImagePreview] = useState<string | null>(null);
+  const [fallbackImagePreview, setFallbackImagePreview] = useState<
+    string | null
+  >(null);
   const lastProcessedQuestionRef = useRef<string>("");
   const processingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const fallbackImageInputRef = useRef<HTMLInputElement>(null);
@@ -83,14 +86,16 @@ const LiveAvatarSessionComponent: React.FC<{
   const lastAvatarResponseRef = useRef<string>("");
   const hasAutoAnalyzedRef = useRef<boolean>(false);
 
-  const [uploadType, setUploadType] = useState<string>('image');
+  const [uploadType, setUploadType] = useState<string>("image");
   const isAttachedRef = useRef<boolean>(false);
   const greetingTriggeredRef = useRef<boolean>(false);
   const audioUnlockedRef = useRef<boolean>(false);
-  
+
   // Vision mode state: 'streaming' for Go Live, 'snapshot' for Camera button, null for inactive
-  const [visionMode, setVisionMode] = useState<'streaming' | 'snapshot' | null>(null);
-  
+  const [visionMode, setVisionMode] = useState<"streaming" | "snapshot" | null>(
+    null,
+  );
+
   // Video recording state
   const [isVideoActive, setIsVideoActive] = useState(false);
   const [videoStream, setVideoStream] = useState<MediaStream | null>(null);
@@ -117,7 +122,7 @@ const LiveAvatarSessionComponent: React.FC<{
     }
     setIsCameraActive(false);
     setVisionMode(null);
-    
+
     // Close video recording if active
     if (videoStream) {
       videoStream.getTracks().forEach((track) => track.stop());
@@ -130,20 +135,24 @@ const LiveAvatarSessionComponent: React.FC<{
     setIsVideoActive(false);
     setRecordedVideoBlob(null);
     recordedChunksRef.current = [];
-    
+
     // Clean up preview URL if it's not the default fallback image
-    if (fallbackImagePreview && fallbackImage && fallbackImage.name !== '2c44c052-e58a-4f6d-a6c8-dba901ff0e9e.jpg') {
+    if (
+      fallbackImagePreview &&
+      fallbackImage &&
+      fallbackImage.name !== "2c44c052-e58a-4f6d-a6c8-dba901ff0e9e.jpg"
+    ) {
       URL.revokeObjectURL(fallbackImagePreview);
     }
     setFallbackImage(null);
     setFallbackImagePreview(null);
-    
+
     // Clear analysis states
     setImageAnalysis(null);
     setIsAnalyzingImage(false);
     setIsAnalyzingVideo(false);
     setIsProcessingCameraQuestion(false);
-    
+
     // Reset processing refs
     lastProcessedQuestionRef.current = "";
     hasAutoAnalyzedRef.current = false;
@@ -151,12 +160,30 @@ const LiveAvatarSessionComponent: React.FC<{
       clearTimeout(processingTimeoutRef.current);
       processingTimeoutRef.current = null;
     }
-  }, [cameraStream, fallbackImage, fallbackImagePreview, videoStream, isRecording]);
+  }, [
+    cameraStream,
+    fallbackImage,
+    fallbackImagePreview,
+    videoStream,
+    isRecording,
+  ]);
 
   // Check if we're on the home screen (no camera, no video, no uploads)
   const isOnHomeScreen = useCallback(() => {
-    return !isCameraActive && !isVideoActive && !imageAnalysis && !isAnalyzingImage && !isAnalyzingVideo;
-  }, [isCameraActive, isVideoActive, imageAnalysis, isAnalyzingImage, isAnalyzingVideo]);
+    return (
+      !isCameraActive &&
+      !isVideoActive &&
+      !imageAnalysis &&
+      !isAnalyzingImage &&
+      !isAnalyzingVideo
+    );
+  }, [
+    isCameraActive,
+    isVideoActive,
+    imageAnalysis,
+    isAnalyzingImage,
+    isAnalyzingVideo,
+  ]);
 
   // Wrapper for stopSession - ends session on home screen, resets to home screen otherwise
   const handleStopSession = useCallback(() => {
@@ -186,14 +213,14 @@ const LiveAvatarSessionComponent: React.FC<{
       await video.play();
       video.volume = 1.0;
       video.muted = false;
-      
+
       // Ensure audio tracks are enabled
       if (video.srcObject && video.srcObject instanceof MediaStream) {
-        video.srcObject.getAudioTracks().forEach(track => {
+        video.srcObject.getAudioTracks().forEach((track) => {
           track.enabled = true;
         });
       }
-      
+
       audioUnlockedRef.current = true;
       console.log("Audio unlocked successfully");
     } catch (error) {
@@ -223,7 +250,7 @@ const LiveAvatarSessionComponent: React.FC<{
       video.muted = false;
       // Also ensure audio tracks are enabled if available
       if (video.srcObject && video.srcObject instanceof MediaStream) {
-        video.srcObject.getAudioTracks().forEach(track => {
+        video.srcObject.getAudioTracks().forEach((track) => {
           track.enabled = true;
         });
       }
@@ -240,21 +267,30 @@ const LiveAvatarSessionComponent: React.FC<{
       await unlockAudio();
       // Remove listeners after first successful unlock
       if (audioUnlockedRef.current) {
-        document.removeEventListener('click', handleUserInteraction);
-        document.removeEventListener('touchstart', handleUserInteraction);
-        document.removeEventListener('touchend', handleUserInteraction);
+        document.removeEventListener("click", handleUserInteraction);
+        document.removeEventListener("touchstart", handleUserInteraction);
+        document.removeEventListener("touchend", handleUserInteraction);
       }
     };
 
     // Listen for various user interaction events
-    document.addEventListener('click', handleUserInteraction, { once: true, passive: true });
-    document.addEventListener('touchstart', handleUserInteraction, { once: true, passive: true });
-    document.addEventListener('touchend', handleUserInteraction, { once: true, passive: true });
+    document.addEventListener("click", handleUserInteraction, {
+      once: true,
+      passive: true,
+    });
+    document.addEventListener("touchstart", handleUserInteraction, {
+      once: true,
+      passive: true,
+    });
+    document.addEventListener("touchend", handleUserInteraction, {
+      once: true,
+      passive: true,
+    });
 
     return () => {
-      document.removeEventListener('click', handleUserInteraction);
-      document.removeEventListener('touchstart', handleUserInteraction);
-      document.removeEventListener('touchend', handleUserInteraction);
+      document.removeEventListener("click", handleUserInteraction);
+      document.removeEventListener("touchstart", handleUserInteraction);
+      document.removeEventListener("touchend", handleUserInteraction);
     };
   }, [unlockAudio]);
 
@@ -276,59 +312,69 @@ const LiveAvatarSessionComponent: React.FC<{
   const loadFallbackImage = useCallback(async (): Promise<File> => {
     return new Promise((resolve, reject) => {
       const img = new Image();
-      img.crossOrigin = 'anonymous';
-      
+      img.crossOrigin = "anonymous";
+
       img.onload = () => {
-        const canvas = document.createElement('canvas');
+        const canvas = document.createElement("canvas");
         canvas.width = img.width;
         canvas.height = img.height;
-        const ctx = canvas.getContext('2d');
+        const ctx = canvas.getContext("2d");
         if (!ctx) {
-          reject(new Error('Failed to get canvas context'));
+          reject(new Error("Failed to get canvas context"));
           return;
         }
         ctx.drawImage(img, 0, 0);
-        canvas.toBlob((blob) => {
-          if (blob) {
-            const file = new File([blob], '2c44c052-e58a-4f6d-a6c8-dba901ff0e9e.jpg', { type: 'image/jpeg' });
-            resolve(file);
-          } else {
-            reject(new Error('Failed to convert canvas to blob'));
-          }
-        }, 'image/jpeg', 0.95);
+        canvas.toBlob(
+          (blob) => {
+            if (blob) {
+              const file = new File(
+                [blob],
+                "2c44c052-e58a-4f6d-a6c8-dba901ff0e9e.jpg",
+                { type: "image/jpeg" },
+              );
+              resolve(file);
+            } else {
+              reject(new Error("Failed to convert canvas to blob"));
+            }
+          },
+          "image/jpeg",
+          0.95,
+        );
       };
-      
+
       img.onerror = () => {
-        reject(new Error('Failed to load fallback image from public folder'));
+        reject(new Error("Failed to load fallback image from public folder"));
       };
-      
+
       // Load image from public folder
-      img.src = '/2c44c052-e58a-4f6d-a6c8-dba901ff0e9e.jpg';
+      img.src = "/2c44c052-e58a-4f6d-a6c8-dba901ff0e9e.jpg";
     });
   }, []);
 
   // Handle Go Live button - enable real-time streaming vision mode (verbal questions)
   const handleGoLive = useCallback(async () => {
     // If already in streaming vision mode, return
-    if (visionMode === 'streaming') {
+    if (visionMode === "streaming") {
       return;
     }
 
     // Activate streaming Vision mode
-    setVisionMode('streaming');
-    
+    setVisionMode("streaming");
+
     // If camera is not available, show fallback mode with default image
     if (cameraAvailable === false) {
       setIsCameraActive(true);
       // If fallback image is not already set, load it
       if (!fallbackImage) {
-        loadFallbackImage().then((file) => {
-          setFallbackImage(file);
-          const previewUrl = URL.createObjectURL(file);
-          setFallbackImagePreview(previewUrl);
-        }).catch((error) => {
-          console.error("Error loading fallback image:", error);
-        });
+        loadFallbackImage()
+          .then((file) => {
+            setFallbackImage(file);
+            const previewUrl = URL.createObjectURL(file);
+            setFallbackImagePreview(previewUrl);
+          })
+          .catch((error) => {
+            console.error("Error loading fallback image:", error);
+          });
       }
       return;
     }
@@ -356,13 +402,15 @@ const LiveAvatarSessionComponent: React.FC<{
           setIsCameraActive(true);
           // If fallback image is not already set, load it
           if (!fallbackImage) {
-            loadFallbackImage().then((file) => {
-              setFallbackImage(file);
-              const previewUrl = URL.createObjectURL(file);
-              setFallbackImagePreview(previewUrl);
-            }).catch((error) => {
-              console.error("Error loading fallback image:", error);
-            });
+            loadFallbackImage()
+              .then((file) => {
+                setFallbackImage(file);
+                const previewUrl = URL.createObjectURL(file);
+                setFallbackImagePreview(previewUrl);
+              })
+              .catch((error) => {
+                console.error("Error loading fallback image:", error);
+              });
           }
           return;
         }
@@ -378,36 +426,24 @@ const LiveAvatarSessionComponent: React.FC<{
       setCameraAvailable(false);
       setIsCameraActive(true);
       if (!fallbackImage) {
-        loadFallbackImage().then((file) => {
-          setFallbackImage(file);
-          const previewUrl = URL.createObjectURL(file);
-          setFallbackImagePreview(previewUrl);
-        }).catch((error) => {
-          console.error("Error loading fallback image:", error);
-        });
+        loadFallbackImage()
+          .then((file) => {
+            setFallbackImage(file);
+            const previewUrl = URL.createObjectURL(file);
+            setFallbackImagePreview(previewUrl);
+          })
+          .catch((error) => {
+            console.error("Error loading fallback image:", error);
+          });
       }
     }
-  }, [triggerGreetingIfNeeded, visionMode, cameraAvailable, fallbackImage, loadFallbackImage]);
-
-
-
-
-
-
-
-  
-
-
-
-
-
-
-
-
-
-
-
-
+  }, [
+    triggerGreetingIfNeeded,
+    visionMode,
+    cameraAvailable,
+    fallbackImage,
+    loadFallbackImage,
+  ]);
 
   useEffect(() => {
     if (sessionState === SessionState.INACTIVE) {
@@ -436,23 +472,23 @@ const LiveAvatarSessionComponent: React.FC<{
     if (cameraStream && cameraPreviewRef.current) {
       const video = cameraPreviewRef.current;
       video.srcObject = cameraStream;
-      
+
       // Ensure video plays
       video.play().catch((error) => {
         console.error("Error playing camera video:", error);
       });
-      
+
       // Log when video is ready
       const onLoadedMetadata = () => {
         console.log("Camera video metadata loaded:", {
           width: video.videoWidth,
           height: video.videoHeight,
-          readyState: video.readyState
+          readyState: video.readyState,
         });
       };
-      
+
       video.addEventListener("loadedmetadata", onLoadedMetadata);
-      
+
       return () => {
         video.removeEventListener("loadedmetadata", onLoadedMetadata);
       };
@@ -479,7 +515,7 @@ const LiveAvatarSessionComponent: React.FC<{
 
     try {
       const video = cameraPreviewRef.current;
-      
+
       // Wait for video to be ready with valid dimensions
       if (video.readyState < 2) {
         // Video not ready, wait for loadedmetadata
@@ -487,15 +523,15 @@ const LiveAvatarSessionComponent: React.FC<{
           const timeout = setTimeout(() => {
             reject(new Error("Video metadata loading timeout"));
           }, 3000);
-          
+
           const onLoadedMetadata = () => {
             clearTimeout(timeout);
             video.removeEventListener("loadedmetadata", onLoadedMetadata);
             resolve();
           };
-          
+
           video.addEventListener("loadedmetadata", onLoadedMetadata);
-          
+
           // If already loaded, resolve immediately
           if (video.readyState >= 2) {
             clearTimeout(timeout);
@@ -507,7 +543,11 @@ const LiveAvatarSessionComponent: React.FC<{
 
       // Check if video has valid dimensions
       if (video.videoWidth === 0 || video.videoHeight === 0) {
-        console.error("Video has invalid dimensions:", video.videoWidth, video.videoHeight);
+        console.error(
+          "Video has invalid dimensions:",
+          video.videoWidth,
+          video.videoHeight,
+        );
         return null;
       }
 
@@ -519,24 +559,30 @@ const LiveAvatarSessionComponent: React.FC<{
         console.error("Failed to get canvas context");
         return null;
       }
-      
+
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      
+
       return new Promise((resolve) => {
-        canvas.toBlob((blob) => {
-          if (blob) {
-            const file = new File([blob], "camera-frame.jpg", { type: "image/jpeg" });
-            console.log("Camera frame captured successfully:", {
-              width: canvas.width,
-              height: canvas.height,
-              fileSize: file.size
-            });
-            resolve(file);
-          } else {
-            console.error("Failed to convert canvas to blob");
-            resolve(null);
-          }
-        }, "image/jpeg", 0.95);
+        canvas.toBlob(
+          (blob) => {
+            if (blob) {
+              const file = new File([blob], "camera-frame.jpg", {
+                type: "image/jpeg",
+              });
+              console.log("Camera frame captured successfully:", {
+                width: canvas.width,
+                height: canvas.height,
+                fileSize: file.size,
+              });
+              resolve(file);
+            } else {
+              console.error("Failed to convert canvas to blob");
+              resolve(null);
+            }
+          },
+          "image/jpeg",
+          0.95,
+        );
       });
     } catch (error) {
       console.error("Error capturing camera frame:", error);
@@ -546,16 +592,16 @@ const LiveAvatarSessionComponent: React.FC<{
 
   // Function to capture photo and analyze it (only for snapshot mode)
   const handleSnapPhoto = useCallback(async () => {
-    if (!isCameraActive || visionMode !== 'snapshot') {
+    if (!isCameraActive || visionMode !== "snapshot") {
       return;
     }
 
     try {
       setIsAnalyzingImage(true);
-      
+
       // Capture frame from camera or use fallback image
       const frameFile = await captureCameraFrame();
-      
+
       if (!frameFile) {
         console.error("Failed to capture camera frame");
         setIsAnalyzingImage(false);
@@ -569,9 +615,13 @@ const LiveAvatarSessionComponent: React.FC<{
       }
       setIsCameraActive(false);
       setVisionMode(null);
-      
+
       // Clean up preview URL if it's not the default fallback image
-      if (fallbackImagePreview && fallbackImage && fallbackImage.name !== '2c44c052-e58a-4f6d-a6c8-dba901ff0e9e.jpg') {
+      if (
+        fallbackImagePreview &&
+        fallbackImage &&
+        fallbackImage.name !== "2c44c052-e58a-4f6d-a6c8-dba901ff0e9e.jpg"
+      ) {
         URL.revokeObjectURL(fallbackImagePreview);
       }
       setFallbackImage(null);
@@ -580,7 +630,10 @@ const LiveAvatarSessionComponent: React.FC<{
       // Analyze the photo
       const formData = new FormData();
       formData.append("image", frameFile);
-      formData.append("question", "What can you see in this image? Please describe everything you see with enthusiasm and humor!");
+      formData.append(
+        "question",
+        "What can you see in this image? Please describe everything you see with enthusiasm and humor!",
+      );
 
       const response = await fetch("/api/analyze-image", {
         method: "POST",
@@ -601,155 +654,205 @@ const LiveAvatarSessionComponent: React.FC<{
         // Send analysis as context to AI so it knows what's in the image
         const contextMessage = `The user has shared an image with you. You can see this image clearly, and here's what you observe: ${analysis}. When the user asks about what they're seeing or asks questions about the image, respond as if you're directly viewing it. Describe what you see naturally and confidently - you have full visibility of the image.`;
         sessionRef.current.message(contextMessage);
-        
+
         // Ask short question instead of full analysis
-        await repeat("What problems can I help you solve that are in this picture?");
+        await repeat(
+          "What problems can I help you solve that are in this picture?",
+        );
       }
 
       setIsAnalyzingImage(false);
     } catch (error) {
       console.error("Error capturing and analyzing photo:", error);
       if (mode === "FULL") {
-        await repeat("Oops! I had a little trouble analyzing the photo. Could you try again?");
+        await repeat(
+          "Oops! I had a little trouble analyzing the photo. Could you try again?",
+        );
       }
       setIsAnalyzingImage(false);
     }
-  }, [isCameraActive, visionMode, captureCameraFrame, cameraStream, fallbackImage, fallbackImagePreview, mode, sessionRef, repeat]);
+  }, [
+    isCameraActive,
+    visionMode,
+    captureCameraFrame,
+    cameraStream,
+    fallbackImage,
+    fallbackImagePreview,
+    mode,
+    sessionRef,
+    repeat,
+  ]);
 
   // Function to process camera question (only for streaming mode - verbal questions)
-  const processCameraQuestion = useCallback(async (question: string, skipDuplicateCheck: boolean = false) => {
-    console.log("processCameraQuestion called", { question, skipDuplicateCheck, isCameraActive, visionMode, isProcessingCameraQuestion });
-    
-    // Only process in streaming mode (Go Live)
-    if (!isCameraActive || visionMode !== 'streaming') {
-      console.log("Not in streaming vision mode, returning early");
-      return;
-    }
+  const processCameraQuestion = useCallback(
+    async (question: string, skipDuplicateCheck: boolean = false) => {
+      console.log("processCameraQuestion called", {
+        question,
+        skipDuplicateCheck,
+        isCameraActive,
+        visionMode,
+        isProcessingCameraQuestion,
+      });
 
-    const userText = question.trim();
-    
-    // Allow empty question for general analysis (when camera mode is first activated)
-    // Skip only if we're not doing a general analysis (skipDuplicateCheck is false and question is empty)
-    if (userText.length === 0 && !skipDuplicateCheck) {
-      console.log("Question is empty and not a general analysis request, returning early");
-      return;
-    }
-
-    // Skip if already processing (use ref for immediate check to prevent race conditions)
-    // Note: We allow processing if isDebugProcessingRef is set by the current call
-    // The check is done in handleDebugAnalysis before calling this function
-    if (isProcessingCameraQuestion) {
-      console.log("Already processing, skipping duplicate request");
-      return;
-    }
-
-    // Skip duplicate check if explicitly skipped (for debug button)
-    if (!skipDuplicateCheck && lastProcessedQuestionRef.current === userText) {
-      console.log("Skipping duplicate question:", userText);
-      return;
-    }
-    
-    // Clear any existing timeout
-    if (processingTimeoutRef.current) {
-      clearTimeout(processingTimeoutRef.current);
-    }
-    
-    // Mark as processing and store the question
-    console.log("Processing question with camera frame analysis...");
-    setIsProcessingCameraQuestion(true);
-    setIsAnalyzingImage(true);
-    // Show loading text for vision recognition in streaming mode (initial recognition)
-    if (visionMode === 'streaming' && userText.length === 0 && skipDuplicateCheck) {
-      setShowVisionLoading(true);
-    }
-    lastProcessedQuestionRef.current = userText;
-
-    try {
-      // Capture frame from camera or use fallback image
-      console.log("Capturing camera frame or using fallback image...");
-      const frameFile = await captureCameraFrame();
-      
-      if (!frameFile) {
-        console.error("Failed to capture camera frame or no fallback image");
-        if (mode === "FULL") {
-          if (cameraAvailable === false && !fallbackImage) {
-            await repeat("I don't have a camera or image to analyze right now. Please upload an image first by clicking the Camera button and selecting an image!");
-          } else {
-            await repeat("Hmm, I'm having trouble capturing what I'm seeing right now. Could you try asking again in a moment?");
-          }
-        }
-        setIsProcessingCameraQuestion(false);
-        setIsAnalyzingImage(false);
-        // Reset after a delay to allow retry
-        processingTimeoutRef.current = setTimeout(() => {
-          lastProcessedQuestionRef.current = "";
-        }, 2000);
+      // Only process in streaming mode (Go Live)
+      if (!isCameraActive || visionMode !== "streaming") {
+        console.log("Not in streaming vision mode, returning early");
         return;
       }
 
-      console.log("Frame captured, sending to API with question:", userText);
-      // Send to analyze-image API with the user's question
-      const formData = new FormData();
-      formData.append("image", frameFile);
-      formData.append("question", userText);
+      const userText = question.trim();
 
-      const response = await fetch("/api/analyze-image", {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        console.error("API error:", error);
-        throw new Error(error.error || "Failed to analyze camera frame");
+      // Allow empty question for general analysis (when camera mode is first activated)
+      // Skip only if we're not doing a general analysis (skipDuplicateCheck is false and question is empty)
+      if (userText.length === 0 && !skipDuplicateCheck) {
+        console.log(
+          "Question is empty and not a general analysis request, returning early",
+        );
+        return;
       }
 
-      const data = await response.json();
-      const analysis = data.analysis;
-      console.log("Analysis received:", analysis.substring(0, 100) + "...");
-      setImageAnalysis(analysis);
-
-      // For initial recognition (empty question with skipDuplicateCheck), append the specific message
-      let responseMessage = analysis;
-      if (userText.length === 0 && skipDuplicateCheck) {
-        // This is initial recognition when Go Live starts - append the specific question
-        responseMessage = analysis + " What problems can I help you solve that we're looking at today?";
+      // Skip if already processing (use ref for immediate check to prevent race conditions)
+      // Note: We allow processing if isDebugProcessingRef is set by the current call
+      // The check is done in handleDebugAnalysis before calling this function
+      if (isProcessingCameraQuestion) {
+        console.log("Already processing, skipping duplicate request");
+        return;
       }
 
-      // Store the response to filter out avatar transcriptions later
-      lastAvatarResponseRef.current = responseMessage.substring(0, 100); // Store first 100 chars for comparison
-
-      // Hide loading when we start sending response to avatar
-      setShowVisionLoading(false);
-
-      // Send the response to the avatar - use repeat() to speak directly without AI processing
-      if (mode === "FULL") {
-        console.log("Sending response to avatar using repeat()");
-        // Use repeat() to make avatar speak the analysis directly without AI processing
-        await repeat(responseMessage);
+      // Skip duplicate check if explicitly skipped (for debug button)
+      if (
+        !skipDuplicateCheck &&
+        lastProcessedQuestionRef.current === userText
+      ) {
+        console.log("Skipping duplicate question:", userText);
+        return;
       }
-      
-      // Reset the last processed question after a delay to allow the same question to be asked again later
-      processingTimeoutRef.current = setTimeout(() => {
-        lastProcessedQuestionRef.current = "";
-      }, 5000);
-    } catch (error) {
-      console.error("Error processing camera question:", error);
-      setShowVisionLoading(false);
-      // Send a friendly error message - use repeat() to speak directly
-      if (mode === "FULL") {
-        await repeat("Oops! I had a little trouble analyzing what I'm seeing right now. Could you try asking again?");
+
+      // Clear any existing timeout
+      if (processingTimeoutRef.current) {
+        clearTimeout(processingTimeoutRef.current);
       }
-      // Reset after error
-      processingTimeoutRef.current = setTimeout(() => {
-        lastProcessedQuestionRef.current = "";
-      }, 2000);
-    } finally {
-      setIsProcessingCameraQuestion(false);
-      setIsAnalyzingImage(false);
-      // Loading will be hidden when avatar starts talking (via useEffect) or already hidden above
-    }
-  }, [isCameraActive, isProcessingCameraQuestion, visionMode, mode, captureCameraFrame, cameraAvailable, fallbackImage, sessionRef, repeat]);
+
+      // Mark as processing and store the question
+      console.log("Processing question with camera frame analysis...");
+      setIsProcessingCameraQuestion(true);
+      setIsAnalyzingImage(true);
+      // Show loading text for vision recognition in streaming mode (initial recognition)
+      if (
+        visionMode === "streaming" &&
+        userText.length === 0 &&
+        skipDuplicateCheck
+      ) {
+        setShowVisionLoading(true);
+      }
+      lastProcessedQuestionRef.current = userText;
+
+      try {
+        // Capture frame from camera or use fallback image
+        console.log("Capturing camera frame or using fallback image...");
+        const frameFile = await captureCameraFrame();
+
+        if (!frameFile) {
+          console.error("Failed to capture camera frame or no fallback image");
+          if (mode === "FULL") {
+            if (cameraAvailable === false && !fallbackImage) {
+              await repeat(
+                "I don't have a camera or image to analyze right now. Please upload an image first by clicking the Camera button and selecting an image!",
+              );
+            } else {
+              await repeat(
+                "Hmm, I'm having trouble capturing what I'm seeing right now. Could you try asking again in a moment?",
+              );
+            }
+          }
+          setIsProcessingCameraQuestion(false);
+          setIsAnalyzingImage(false);
+          // Reset after a delay to allow retry
+          processingTimeoutRef.current = setTimeout(() => {
+            lastProcessedQuestionRef.current = "";
+          }, 2000);
+          return;
+        }
+
+        console.log("Frame captured, sending to API with question:", userText);
+        // Send to analyze-image API with the user's question
+        const formData = new FormData();
+        formData.append("image", frameFile);
+        formData.append("question", userText);
+
+        const response = await fetch("/api/analyze-image", {
+          method: "POST",
+          body: formData,
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          console.error("API error:", error);
+          throw new Error(error.error || "Failed to analyze camera frame");
+        }
+
+        const data = await response.json();
+        const analysis = data.analysis;
+        console.log("Analysis received:", analysis.substring(0, 100) + "...");
+        setImageAnalysis(analysis);
+
+        // For initial recognition (empty question with skipDuplicateCheck), append the specific message
+        let responseMessage = analysis;
+        if (userText.length === 0 && skipDuplicateCheck) {
+          // This is initial recognition when Go Live starts - append the specific question
+          responseMessage =
+            analysis +
+            " What problems can I help you solve that we're looking at today?";
+        }
+
+        // Store the response to filter out avatar transcriptions later
+        lastAvatarResponseRef.current = responseMessage.substring(0, 100); // Store first 100 chars for comparison
+
+        // Hide loading when we start sending response to avatar
+        setShowVisionLoading(false);
+
+        // Send the response to the avatar - use repeat() to speak directly without AI processing
+        if (mode === "FULL") {
+          console.log("Sending response to avatar using repeat()");
+          // Use repeat() to make avatar speak the analysis directly without AI processing
+          await repeat(responseMessage);
+        }
+
+        // Reset the last processed question after a delay to allow the same question to be asked again later
+        processingTimeoutRef.current = setTimeout(() => {
+          lastProcessedQuestionRef.current = "";
+        }, 5000);
+      } catch (error) {
+        console.error("Error processing camera question:", error);
+        setShowVisionLoading(false);
+        // Send a friendly error message - use repeat() to speak directly
+        if (mode === "FULL") {
+          await repeat(
+            "Oops! I had a little trouble analyzing what I'm seeing right now. Could you try asking again?",
+          );
+        }
+        // Reset after error
+        processingTimeoutRef.current = setTimeout(() => {
+          lastProcessedQuestionRef.current = "";
+        }, 2000);
+      } finally {
+        setIsProcessingCameraQuestion(false);
+        setIsAnalyzingImage(false);
+        // Loading will be hidden when avatar starts talking (via useEffect) or already hidden above
+      }
+    },
+    [
+      isCameraActive,
+      isProcessingCameraQuestion,
+      visionMode,
+      mode,
+      captureCameraFrame,
+      cameraAvailable,
+      fallbackImage,
+      sessionRef,
+      repeat,
+    ],
+  );
 
   // Debug button handler
   const handleDebugAnalysis = useCallback(async () => {
@@ -758,7 +861,7 @@ const LiveAvatarSessionComponent: React.FC<{
       isProcessingCameraQuestion,
       isCameraActive,
       hasFallbackImage: !!fallbackImage,
-      cameraAvailable
+      cameraAvailable,
     });
 
     // Prevent multiple simultaneous calls
@@ -773,10 +876,11 @@ const LiveAvatarSessionComponent: React.FC<{
     }
 
     isDebugProcessingRef.current = true;
-    const defaultQuestion = "What can you see in this image? Please describe everything you see with enthusiasm and humor!";
-    
+    const defaultQuestion =
+      "What can you see in this image? Please describe everything you see with enthusiasm and humor!";
+
     console.log("Starting debug analysis with question:", defaultQuestion);
-    
+
     try {
       await processCameraQuestion(defaultQuestion, true);
       console.log("Debug analysis completed successfully");
@@ -789,7 +893,13 @@ const LiveAvatarSessionComponent: React.FC<{
         console.log("Debug processing ref reset");
       }, 500);
     }
-  }, [processCameraQuestion, isProcessingCameraQuestion, isCameraActive, fallbackImage, cameraAvailable]);
+  }, [
+    processCameraQuestion,
+    isProcessingCameraQuestion,
+    isCameraActive,
+    fallbackImage,
+    cameraAvailable,
+  ]);
 
   // Listen to user transcriptions and handle verbal questions in streaming mode (Go Live)
   useEffect(() => {
@@ -799,72 +909,96 @@ const LiveAvatarSessionComponent: React.FC<{
 
     const handleUserTranscription = async (event: { text: string }) => {
       const userText = event.text.trim();
-      console.log("User transcription received:", userText, "Vision mode:", visionMode);
-      
+      console.log(
+        "User transcription received:",
+        userText,
+        "Vision mode:",
+        visionMode,
+      );
+
       // Only process in streaming mode (Go Live)
-      if (visionMode !== 'streaming') {
+      if (visionMode !== "streaming") {
         console.log("Not in streaming mode, skipping transcription processing");
         return;
       }
-      
+
       // Skip if this transcription matches our recent avatar response (avatar's speech being transcribed)
       // This prevents infinite loops where avatar's response triggers another analysis
       if (lastAvatarResponseRef.current && userText.length > 30) {
-        const responseStart = lastAvatarResponseRef.current.toLowerCase().trim();
-        const transcriptionStart = userText.substring(0, Math.min(150, userText.length)).toLowerCase().trim();
-        
+        const responseStart = lastAvatarResponseRef.current
+          .toLowerCase()
+          .trim();
+        const transcriptionStart = userText
+          .substring(0, Math.min(150, userText.length))
+          .toLowerCase()
+          .trim();
+
         // Check if transcription matches our response (avatar speaking our response)
         // Compare first 50-100 characters for similarity
         const responsePrefix = responseStart.substring(0, 80);
         const transcriptionPrefix = transcriptionStart.substring(0, 80);
-        
+
         // If they're very similar (80% match), it's likely the avatar's response
         if (responsePrefix.length > 30 && transcriptionPrefix.length > 30) {
           let matchCount = 0;
-          const minLength = Math.min(responsePrefix.length, transcriptionPrefix.length);
+          const minLength = Math.min(
+            responsePrefix.length,
+            transcriptionPrefix.length,
+          );
           for (let i = 0; i < minLength; i++) {
             if (responsePrefix[i] === transcriptionPrefix[i]) {
               matchCount++;
             }
           }
           const similarity = matchCount / minLength;
-          
+
           if (similarity > 0.7) {
-            console.log("Skipping transcription - appears to be avatar's response being transcribed", {
-              similarity,
-              responsePrefix: responsePrefix.substring(0, 50),
-              transcriptionPrefix: transcriptionPrefix.substring(0, 50)
-            });
+            console.log(
+              "Skipping transcription - appears to be avatar's response being transcribed",
+              {
+                similarity,
+                responsePrefix: responsePrefix.substring(0, 50),
+                transcriptionPrefix: transcriptionPrefix.substring(0, 50),
+              },
+            );
             return;
           }
         }
       }
-      
+
       // Also skip if transcription is very long (likely avatar response, not user question)
       // User questions are typically shorter, avatar responses are longer
       if (userText.length > 200) {
-        console.log("Skipping transcription - too long, likely avatar response");
+        console.log(
+          "Skipping transcription - too long, likely avatar response",
+        );
         return;
       }
-      
+
       // Skip if transcription is too short (likely noise or partial speech)
       if (userText.length < 3) {
         console.log("Skipping transcription - too short, likely noise");
         return;
       }
-      
+
       // Skip if already processing to prevent duplicate triggers
       if (isProcessingCameraQuestion) {
         console.log("Skipping transcription - already processing");
         return;
       }
-      
+
       // Process the question using the reusable function (only in streaming mode)
       await processCameraQuestion(userText, false);
     };
 
-    console.log("Setting up USER_TRANSCRIPTION listener, vision mode:", visionMode);
-    sessionRef.current.on(AgentEventsEnum.USER_TRANSCRIPTION, handleUserTranscription);
+    console.log(
+      "Setting up USER_TRANSCRIPTION listener, vision mode:",
+      visionMode,
+    );
+    sessionRef.current.on(
+      AgentEventsEnum.USER_TRANSCRIPTION,
+      handleUserTranscription,
+    );
 
     return () => {
       if (processingTimeoutRef.current) {
@@ -873,10 +1007,18 @@ const LiveAvatarSessionComponent: React.FC<{
       if (sessionRef.current) {
         console.log("Cleaning up USER_TRANSCRIPTION listener");
         // Use removeListener if off is not available
-        if (typeof (sessionRef.current as any).off === 'function') {
-          (sessionRef.current as any).off(AgentEventsEnum.USER_TRANSCRIPTION, handleUserTranscription);
-        } else if (typeof (sessionRef.current as any).removeListener === 'function') {
-          (sessionRef.current as any).removeListener(AgentEventsEnum.USER_TRANSCRIPTION, handleUserTranscription);
+        if (typeof (sessionRef.current as any).off === "function") {
+          (sessionRef.current as any).off(
+            AgentEventsEnum.USER_TRANSCRIPTION,
+            handleUserTranscription,
+          );
+        } else if (
+          typeof (sessionRef.current as any).removeListener === "function"
+        ) {
+          (sessionRef.current as any).removeListener(
+            AgentEventsEnum.USER_TRANSCRIPTION,
+            handleUserTranscription,
+          );
         }
       }
     };
@@ -884,20 +1026,33 @@ const LiveAvatarSessionComponent: React.FC<{
 
   // Automatically trigger vision recognition when Go Live streaming mode is activated
   useEffect(() => {
-    if (visionMode === 'streaming' && isCameraActive && !isProcessingCameraQuestion) {
+    if (
+      visionMode === "streaming" &&
+      isCameraActive &&
+      !isProcessingCameraQuestion
+    ) {
       // Wait a moment for camera to be ready, then analyze what's in view
       const timeoutId = setTimeout(() => {
         // Double-check conditions before triggering
-        if (visionMode === 'streaming' && isCameraActive && !isProcessingCameraQuestion) {
+        if (
+          visionMode === "streaming" &&
+          isCameraActive &&
+          !isProcessingCameraQuestion
+        ) {
           processCameraQuestion("", true);
         }
       }, 1000);
-      
+
       return () => {
         clearTimeout(timeoutId);
       };
     }
-  }, [visionMode, isCameraActive, isProcessingCameraQuestion, processCameraQuestion]);
+  }, [
+    visionMode,
+    isCameraActive,
+    isProcessingCameraQuestion,
+    processCameraQuestion,
+  ]);
 
   // Hide loading text when avatar starts talking
   useEffect(() => {
@@ -974,9 +1129,11 @@ const LiveAvatarSessionComponent: React.FC<{
     const checkCameraAvailability = async () => {
       try {
         const devices = await navigator.mediaDevices.enumerateDevices();
-        const hasVideoInput = devices.some(device => device.kind === 'videoinput');
+        const hasVideoInput = devices.some(
+          (device) => device.kind === "videoinput",
+        );
         setCameraAvailable(hasVideoInput);
-        
+
         // If no camera available, load and set default fallback image
         if (!hasVideoInput) {
           try {
@@ -1005,10 +1162,8 @@ const LiveAvatarSessionComponent: React.FC<{
     checkCameraAvailability();
   }, [loadFallbackImage]);
 
-
-  
   const handleCameraClick = async () => {
-    if (visionMode === 'snapshot') {
+    if (visionMode === "snapshot") {
       // Stop camera if already in snapshot mode
       if (cameraStream) {
         cameraStream.getTracks().forEach((track) => track.stop());
@@ -1018,27 +1173,29 @@ const LiveAvatarSessionComponent: React.FC<{
       setVisionMode(null);
       setFallbackImage(null);
       setFallbackImagePreview(null);
-      
+
       // CRITICAL: Don't pause or mute the video element
       // Audio should continue playing
       return;
     }
 
     // Set to snapshot mode (for taking a single photo)
-    setVisionMode('snapshot');
+    setVisionMode("snapshot");
 
     // If camera is not available, show fallback mode with default image
     if (cameraAvailable === false) {
       setIsCameraActive(true);
       // If fallback image is not already set, load it
       if (!fallbackImage) {
-        loadFallbackImage().then((file) => {
-          setFallbackImage(file);
-          const previewUrl = URL.createObjectURL(file);
-          setFallbackImagePreview(previewUrl);
-        }).catch((error) => {
-          console.error("Error loading fallback image:", error);
-        });
+        loadFallbackImage()
+          .then((file) => {
+            setFallbackImage(file);
+            const previewUrl = URL.createObjectURL(file);
+            setFallbackImagePreview(previewUrl);
+          })
+          .catch((error) => {
+            console.error("Error loading fallback image:", error);
+          });
       }
       return;
     }
@@ -1066,13 +1223,15 @@ const LiveAvatarSessionComponent: React.FC<{
           setIsCameraActive(true);
           // If fallback image is not already set, load it
           if (!fallbackImage) {
-            loadFallbackImage().then((file) => {
-              setFallbackImage(file);
-              const previewUrl = URL.createObjectURL(file);
-              setFallbackImagePreview(previewUrl);
-            }).catch((error) => {
-              console.error("Error loading fallback image:", error);
-            });
+            loadFallbackImage()
+              .then((file) => {
+                setFallbackImage(file);
+                const previewUrl = URL.createObjectURL(file);
+                setFallbackImagePreview(previewUrl);
+              })
+              .catch((error) => {
+                console.error("Error loading fallback image:", error);
+              });
           }
           return;
         }
@@ -1091,8 +1250,9 @@ const LiveAvatarSessionComponent: React.FC<{
     }
   };
 
-
-  const handleFallbackImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFallbackImageChange = (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
     const file = e.target.files?.[0];
     if (file) {
       if (!file.type.startsWith("image/")) {
@@ -1119,13 +1279,13 @@ const LiveAvatarSessionComponent: React.FC<{
 
   const handleFileUploadClick = (value: string) => {
     // If video, handle video recording instead of file upload
-    if (value === 'video') {
+    if (value === "video") {
       handleVideoClick();
       return;
     }
-    
+
     setUploadType(value);
-    fileInputRef.current?.setAttribute('accept', `${value}/*`);
+    fileInputRef.current?.setAttribute("accept", `${value}/*`);
     fileInputRef.current?.click();
   };
 
@@ -1183,19 +1343,19 @@ const LiveAvatarSessionComponent: React.FC<{
     }
 
     recordedChunksRef.current = [];
-    
+
     // Check for supported MIME types
-    let mimeType = 'video/webm;codecs=vp9,opus';
+    let mimeType = "video/webm;codecs=vp9,opus";
     if (!MediaRecorder.isTypeSupported(mimeType)) {
-      mimeType = 'video/webm;codecs=vp8,opus';
+      mimeType = "video/webm;codecs=vp8,opus";
       if (!MediaRecorder.isTypeSupported(mimeType)) {
-        mimeType = 'video/webm';
+        mimeType = "video/webm";
         if (!MediaRecorder.isTypeSupported(mimeType)) {
-          mimeType = '';
+          mimeType = "";
         }
       }
     }
-    
+
     const options: MediaRecorderOptions = mimeType ? { mimeType } : {};
     const mediaRecorder = new MediaRecorder(videoStream, options);
 
@@ -1206,15 +1366,17 @@ const LiveAvatarSessionComponent: React.FC<{
     };
 
     mediaRecorder.onstop = async () => {
-      const blob = new Blob(recordedChunksRef.current, { type: 'video/webm' });
+      const blob = new Blob(recordedChunksRef.current, { type: "video/webm" });
       setRecordedVideoBlob(blob);
-      
+
       // Analyze the video
       setIsAnalyzingVideo(true);
       try {
-        const videoFile = new File([blob], "recorded-video.webm", { type: "video/webm" });
+        const videoFile = new File([blob], "recorded-video.webm", {
+          type: "video/webm",
+        });
         const frames = await extractVideoFrames(videoFile, 5);
-        
+
         const response = await fetch("/api/analyze-video", {
           method: "POST",
           headers: {
@@ -1230,15 +1392,17 @@ const LiveAvatarSessionComponent: React.FC<{
 
         const data = await response.json();
         console.log("Video analyzed successfully");
-        
+
         // For FULL mode, send the analysis as context to the AI
         if (mode === "FULL" && sessionRef.current) {
           // Send analysis as context to AI so it knows what's in the video
           const contextMessage = `The user has shared a video with you. You can see this video clearly, and here's what you observe: ${data.analysis}. When the user asks about what they're seeing or asks questions about the video, respond as if you're directly viewing it. Describe what you see naturally and confidently - you have full visibility of the video.`;
           sessionRef.current.message(contextMessage);
-          
+
           // Ask short question instead of full analysis
-          await repeat("What problems can I help you solve that are in this video?");
+          await repeat(
+            "What problems can I help you solve that are in this video?",
+          );
         }
 
         // Keep video active for discussion - don't auto-return to home screen
@@ -1268,7 +1432,7 @@ const LiveAvatarSessionComponent: React.FC<{
     if (videoStream && videoPreviewRef.current) {
       const video = videoPreviewRef.current;
       video.srcObject = videoStream;
-      
+
       video.play().catch((error) => {
         console.error("Error playing video stream:", error);
       });
@@ -1296,7 +1460,11 @@ const LiveAvatarSessionComponent: React.FC<{
     setIsCameraActive(false);
     setVisionMode(null);
     // Clean up preview URL if it's not the default fallback image
-    if (fallbackImagePreview && fallbackImage && fallbackImage.name !== '2c44c052-e58a-4f6d-a6c8-dba901ff0e9e.jpg') {
+    if (
+      fallbackImagePreview &&
+      fallbackImage &&
+      fallbackImage.name !== "2c44c052-e58a-4f6d-a6c8-dba901ff0e9e.jpg"
+    ) {
       URL.revokeObjectURL(fallbackImagePreview);
     }
     setFallbackImage(null);
@@ -1321,12 +1489,15 @@ const LiveAvatarSessionComponent: React.FC<{
   }, [fallbackImagePreview]);
 
   // Helper function to extract frames from video
-  const extractVideoFrames = async (videoFile: File, numFrames: number = 5): Promise<string[]> => {
+  const extractVideoFrames = async (
+    videoFile: File,
+    numFrames: number = 5,
+  ): Promise<string[]> => {
     return new Promise((resolve, reject) => {
       const video = document.createElement("video");
       const canvas = document.createElement("canvas");
       const ctx = canvas.getContext("2d");
-      
+
       if (!ctx) {
         reject(new Error("Failed to get canvas context"));
         return;
@@ -1352,7 +1523,8 @@ const LiveAvatarSessionComponent: React.FC<{
 
         if (frameCount < numFrames) {
           // Seek to next frame position
-          const nextTime = (video.duration / (numFrames + 1)) * (frameCount + 1);
+          const nextTime =
+            (video.duration / (numFrames + 1)) * (frameCount + 1);
           video.currentTime = nextTime;
         } else {
           resolve(frames);
@@ -1406,15 +1578,17 @@ const LiveAvatarSessionComponent: React.FC<{
         const data = await response.json();
         setImageAnalysis(data.analysis);
         console.log("Image analyzed successfully");
-        
+
         // For FULL mode, send the analysis as context to the AI
         if (mode === "FULL" && sessionRef.current) {
           // Send analysis as context to AI so it knows what's in the image
           const contextMessage = `The user has shared an image with you. You can see this image clearly, and here's what you observe: ${data.analysis}. When the user asks about what they're seeing or asks questions about the image, respond as if you're directly viewing it. Describe what you see naturally and confidently - you have full visibility of the image.`;
           sessionRef.current.message(contextMessage);
-          
+
           // Ask short question instead of full analysis
-          await repeat("What problems can I help you solve that are in this picture?");
+          await repeat(
+            "What problems can I help you solve that are in this picture?",
+          );
         }
       } catch (error) {
         console.error("Error analyzing image:", error);
@@ -1427,7 +1601,7 @@ const LiveAvatarSessionComponent: React.FC<{
       try {
         // Extract frames from video
         const frames = await extractVideoFrames(file, 5);
-        
+
         const response = await fetch("/api/analyze-video", {
           method: "POST",
           headers: {
@@ -1443,15 +1617,17 @@ const LiveAvatarSessionComponent: React.FC<{
 
         const data = await response.json();
         console.log("Video analyzed successfully");
-        
+
         // For FULL mode, send the analysis as context to the AI
         if (mode === "FULL" && sessionRef.current) {
           // Send analysis as context to AI so it knows what's in the video
           const contextMessage = `The user has shared a video with you. You can see this video clearly, and here's what you observe: ${data.analysis}. When the user asks about what they're seeing or asks questions about the video, respond as if you're directly viewing it. Describe what you see naturally and confidently - you have full visibility of the video.`;
           sessionRef.current.message(contextMessage);
-          
+
           // Ask short question instead of full analysis
-          await repeat("What problems can I help you solve that are in this video?");
+          await repeat(
+            "What problems can I help you solve that are in this video?",
+          );
         }
       } catch (error) {
         console.error("Error analyzing video:", error);
@@ -1503,7 +1679,7 @@ const LiveAvatarSessionComponent: React.FC<{
   return (
     <div className="fixed inset-0 w-screen h-screen bg-black flex flex-col">
       {/* Analyzing popup overlay - only show for snapshot mode, not streaming mode */}
-      {(isAnalyzingImage || isAnalyzingVideo) && visionMode !== 'streaming' && (
+      {(isAnalyzingImage || isAnalyzingVideo) && visionMode !== "streaming" && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-70">
           <div className="bg-gray-800 text-white px-8 py-6 rounded-lg shadow-2xl">
             <p className="text-xl font-semibold text-center">
@@ -1515,7 +1691,9 @@ const LiveAvatarSessionComponent: React.FC<{
 
       {/* Text overlays at the top */}
       <div className="absolute top-0 left-0 right-0 z-10 flex flex-col items-center pt-4 pb-2">
-        <h1 className="text-custom-green text-2xl font-semibold">iSolveUrProblems.ai - beta</h1>
+        <h1 className="text-custom-green text-2xl font-semibold">
+          iSolveUrProblems.ai - beta
+        </h1>
         {microphoneWarning && (
           <div className="mt-4 bg-yellow-500 text-black px-4 py-2 rounded-md max-w-2xl text-center">
             <p className="font-semibold">⚠️ Warning: {microphoneWarning}</p>
@@ -1534,21 +1712,23 @@ const LiveAvatarSessionComponent: React.FC<{
       </div>
 
       {/* Full screen video */}
-      <div className={`relative w-full flex-1 flex items-center justify-center ${isCameraActive || isVideoActive ? 'pt-24' : ''}`}>
+      <div
+        className={`relative w-full flex-1 flex items-center justify-center ${isCameraActive || isVideoActive ? "pt-24" : ""}`}
+      >
         {/* Avatar video - full screen when camera/video inactive, small overlay in left corner when active */}
         <video
           ref={videoRef}
-          autoPlay  // Native autoplay
+          autoPlay // Native autoplay
           playsInline
           preload="auto"
           muted={false}
           className={`${
             isCameraActive || isVideoActive
-              ? 'absolute top-24 left-4 w-24 h-44 object-contain z-20 rounded-lg border-2 border-white shadow-2xl' 
-              : 'h-full w-full object-contain'
+              ? "absolute top-24 left-4 w-24 h-44 object-contain z-20 rounded-lg border-2 border-white shadow-2xl"
+              : "h-full w-full object-contain"
           }`}
         />
-        
+
         {mode === "FULL" && (
           <>
             <input
@@ -1648,7 +1828,7 @@ const LiveAvatarSessionComponent: React.FC<{
         )}
 
         {/* Snap Photo Button - shown only in snapshot mode (Camera button) */}
-        {isCameraActive && !isVideoActive && visionMode === 'snapshot' && (
+        {isCameraActive && !isVideoActive && visionMode === "snapshot" && (
           <div className="fixed bottom-32 left-1/2 transform -translate-x-1/2 z-30">
             <button
               onClick={handleSnapPhoto}
@@ -1728,50 +1908,58 @@ const LiveAvatarSessionComponent: React.FC<{
           )} */}
 
           {/* Status text above buttons */}
-          {sessionState !== SessionState.DISCONNECTED && visionMode !== 'streaming' && (
-            <div className="fixed bottom-[15rem] left-1/2 -translate-x-1/2 z-30">
-              <p className={`text-custom-green text-2xl font-semibold text-center drop-shadow-lg ${
-                isStreamReady && !isAvatarTalking ? 'animate-fade-opacity' : ''
-              }`}>
-                {!isStreamReady ? (
-                  <span className="inline-flex items-center">
-                    Loading
-                    <span className="inline-block animate-pulse">...</span>
-                  </span>
-                ) : isAvatarTalking ? (
-                  "Talk to Interrupt 6"
-                ) : (
-                  "Ask Anything"
-                )}
-              </p>
-            </div>
-          )}
+          {sessionState !== SessionState.DISCONNECTED &&
+            visionMode !== "streaming" && (
+              <div className="fixed bottom-[15rem] left-1/2 -translate-x-1/2 z-30">
+                <p
+                  className={`text-custom-green text-2xl font-semibold text-center drop-shadow-lg ${
+                    isStreamReady && !isAvatarTalking
+                      ? "animate-fade-opacity"
+                      : ""
+                  }`}
+                >
+                  {!isStreamReady ? (
+                    <span className="inline-flex items-center">
+                      Loading
+                      <span className="inline-block animate-pulse">...</span>
+                    </span>
+                  ) : isAvatarTalking ? (
+                    "Talk to Interrupt 6"
+                  ) : (
+                    "Ask Anything"
+                  )}
+                </p>
+              </div>
+            )}
 
           {/* Loading/Analyzing text for vision recognition in streaming mode */}
-          {((showVisionLoading || (isAnalyzingImage || isProcessingCameraQuestion)) && visionMode === 'streaming') && (
-            <div className="fixed bottom-[15rem] left-1/2 -translate-x-1/2 z-30">
-              <p className="text-custom-green text-2xl font-semibold text-center drop-shadow-lg">
-                <span className="inline-flex items-center">
-                  {showVisionLoading ? (
-                    <>
-                      Loading
-                      <span className="inline-block animate-pulse">....</span>
-                    </>
-                  ) : (
-                    <>
-                      Analyzing
-                      <span className="inline-block animate-pulse">...</span>
-                    </>
-                  )}
-                </span>
-              </p>
-            </div>
-          )}
+          {(showVisionLoading ||
+            isAnalyzingImage ||
+            isProcessingCameraQuestion) &&
+            visionMode === "streaming" && (
+              <div className="fixed bottom-[15rem] left-1/2 -translate-x-1/2 z-30">
+                <p className="text-custom-green text-2xl font-semibold text-center drop-shadow-lg">
+                  <span className="inline-flex items-center">
+                    {showVisionLoading ? (
+                      <>
+                        Loading
+                        <span className="inline-block animate-pulse">....</span>
+                      </>
+                    ) : (
+                      <>
+                        Analyzing
+                        <span className="inline-block animate-pulse">...</span>
+                      </>
+                    )}
+                  </span>
+                </p>
+              </div>
+            )}
 
           {/* ss added */}
           <div className="fixed bottom-[4rem] left-1/2 -translate-x-1/2 w-[95%] max-w-7xl p-4">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <button 
+              <button
                 className="bg-gray-800 p-3 rounded-lg flex items-center justify-center text-lg font-medium text-custom-green whitespace-nowrap"
                 onClick={async () => {
                   await unlockAudio();
@@ -1780,8 +1968,8 @@ const LiveAvatarSessionComponent: React.FC<{
               >
                 <Radio className="mr-2 w-5 h-5" /> Go Live
               </button>
-              <button 
-                className="bg-gray-800 p-3 rounded-lg flex items-center justify-center text-lg font-medium text-custom-green whitespace-nowrap" 
+              <button
+                className="bg-gray-800 p-3 rounded-lg flex items-center justify-center text-lg font-medium text-custom-green whitespace-nowrap"
                 onClick={async () => {
                   await unlockAudio();
                   handleCameraClick();
@@ -1790,29 +1978,30 @@ const LiveAvatarSessionComponent: React.FC<{
                 <Camera className="mr-2 w-5 h-5" /> Camera
               </button>
               {/* On wider screens (md and up), swap Gallery and Video positions */}
-              <button 
-                className="bg-gray-800 p-3 rounded-lg flex items-center justify-center text-lg font-medium text-custom-green whitespace-nowrap order-3 md:order-4" 
+              <button
+                className="bg-gray-800 p-3 rounded-lg flex items-center justify-center text-lg font-medium text-custom-green whitespace-nowrap order-3 md:order-4"
                 onClick={async () => {
                   await unlockAudio();
-                  handleFileUploadClick('image');
+                  handleFileUploadClick("image");
                 }}
               >
                 <ImageIcon className="mr-2 w-5 h-5" /> Gallery
               </button>
-              <button 
-                className="bg-gray-800 p-3 rounded-lg flex items-center justify-center text-lg font-medium text-custom-green whitespace-nowrap order-4 md:order-3" 
+              <button
+                className="bg-gray-800 p-3 rounded-lg flex items-center justify-center text-lg font-medium text-custom-green whitespace-nowrap order-4 md:order-3"
                 onClick={async () => {
                   await unlockAudio();
-                  handleFileUploadClick('video');
+                  handleFileUploadClick("video");
                 }}
               >
-                <Video className="mr-2 w-5 h-5" />Video
+                <Video className="mr-2 w-5 h-5" />
+                Video
               </button>
             </div>
           </div>
         </>
       )}
-      
+
       {/* <button
         className="fixed bottom-4 w-[11rem] ml-[7rem] bg-white text-black px-4 py-2 rounded-md z-20"
         onClick={() => stopSession()}
