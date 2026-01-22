@@ -91,7 +91,7 @@ export const LiveAvatarDemo = () => {
 
   if (isExited) {
     return (
-      <div className="w-full h-full flex flex-col items-center justify-center gap-4 bg-black">
+      <div className="w-full h-full flex flex-col items-center justify-center gap-4">
         <div className="text-white text-2xl font-semibold">Session Ended</div>
         <div className="text-gray-400 text-lg">
           Thank you for using iSolveUrProblems.ai
