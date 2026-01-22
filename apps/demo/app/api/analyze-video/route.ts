@@ -33,7 +33,7 @@ export async function POST(request: Request) {
     const content: any[] = [
       {
         type: "text",
-        text: "You can see this video clearly right now by examining the key frames. Describe what you see across these frames, including objects, people, text, colors, actions, movement, context, and any other relevant details. Be thorough and specific, but make your description entertaining, enthusiastic, and full of personality. Use humor, be conversational, and inject some cheerfulness into your observations. Think of yourself as a friendly, outgoing friend who's excited to tell someone about what you're seeing in this video! Never say you can't see the video or that you're relying on someone else's analysis. You are directly viewing this video.",
+        text: "Briefly describe what you see in this video across these frames in 2-3 sentences. Be direct and concise.",
       },
     ];
 
@@ -62,7 +62,7 @@ export async function POST(request: Request) {
             content: content,
           },
         ],
-        max_tokens: 400,
+        max_tokens: 200,
       }),
     });
 

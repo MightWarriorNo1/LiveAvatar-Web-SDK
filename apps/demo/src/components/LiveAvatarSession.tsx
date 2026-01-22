@@ -963,6 +963,12 @@ const LiveAvatarSessionComponent: React.FC<{
         visionMode,
       );
 
+      // Skip transcription when video is recording - avatar should be quiet during recording
+      if (isVideoActive && isRecording) {
+        console.log("Video is recording, skipping transcription - avatar should be quiet");
+        return;
+      }
+
       // Only process in streaming mode (Go Live)
       if (visionMode !== "streaming") {
         console.log("Not in streaming mode, skipping transcription processing");
@@ -1069,7 +1075,7 @@ const LiveAvatarSessionComponent: React.FC<{
         }
       }
     };
-  }, [sessionRef, visionMode, processCameraQuestion]);
+  }, [sessionRef, visionMode, processCameraQuestion, isVideoActive, isRecording]);
 
   // Track if initial analysis has been triggered to prevent repeated automatic analysis
   const hasInitialAnalysisRef = useRef<boolean>(false);
@@ -2009,7 +2015,7 @@ const LiveAvatarSessionComponent: React.FC<{
           {/* Analyzing text for vision recognition in streaming mode - ONLY show when actually processing */}
           {/* Positioned just above Stop button when four boxes are not visible */}
           {visionMode === "streaming" && isProcessingCameraQuestion && (
-              <div className="fixed bottom-14 left-1/2 -translate-x-1/2 z-30">
+              <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-30">
                 <p className="text-custom-green text-2xl font-semibold text-center drop-shadow-lg">
                   <span className="inline-flex items-center">
                     Analyzing
@@ -2020,48 +2026,50 @@ const LiveAvatarSessionComponent: React.FC<{
             )}
 
           {/* ss added */}
-          <div className="fixed bottom-[4rem] left-1/2 -translate-x-1/2 w-[95%] max-w-7xl p-4">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <button
-                className="bg-gray-800 p-3 rounded-lg flex items-center justify-center text-lg font-medium text-custom-green whitespace-nowrap"
-                onClick={async () => {
-                  await unlockAudio();
-                  handleGoLive();
-                }}
-              >
-                <Radio className="mr-2 w-5 h-5" /> Go Live
-              </button>
-              <button
-                className="bg-gray-800 p-3 rounded-lg flex items-center justify-center text-lg font-medium text-custom-green whitespace-nowrap"
-                onClick={async () => {
-                  await unlockAudio();
-                  handleCameraClick();
-                }}
-              >
-                <Camera className="mr-2 w-5 h-5" /> Camera
-              </button>
-              {/* Gallery button in 3rd position, Video in 4th */}
-              <button
-                className="bg-gray-800 p-3 rounded-lg flex items-center justify-center text-lg font-medium text-custom-green whitespace-nowrap"
-                onClick={async () => {
-                  await unlockAudio();
-                  handleFileUploadClick("image");
-                }}
-              >
-                <ImageIcon className="mr-2 w-5 h-5" /> Gallery
-              </button>
-              <button
-                className="bg-gray-800 p-3 rounded-lg flex items-center justify-center text-lg font-medium text-custom-green whitespace-nowrap"
-                onClick={async () => {
-                  await unlockAudio();
-                  handleFileUploadClick("video");
-                }}
-              >
-                <Video className="mr-2 w-5 h-5" />
-                Video
-              </button>
+          {/* Hide buttons when in Video mode */}
+          {!isVideoActive && (
+            <div className="fixed bottom-[4rem] left-1/2 -translate-x-1/2 w-[95%] max-w-7xl p-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <button
+                  className="bg-gray-800 p-3 rounded-lg flex items-center justify-center text-lg font-medium text-custom-green whitespace-nowrap"
+                  onClick={async () => {
+                    await unlockAudio();
+                    handleGoLive();
+                  }}
+                >
+                  <Radio className="mr-2 w-5 h-5" /> Go Live
+                </button>
+                <button
+                  className="bg-gray-800 p-3 rounded-lg flex items-center justify-center text-lg font-medium text-custom-green whitespace-nowrap"
+                  onClick={async () => {
+                    await unlockAudio();
+                    handleFileUploadClick("image");
+                  }}
+                >
+                  <ImageIcon className="mr-2 w-5 h-5" /> Gallery
+                </button>
+                <button
+                  className="bg-gray-800 p-3 rounded-lg flex items-center justify-center text-lg font-medium text-custom-green whitespace-nowrap"
+                  onClick={async () => {
+                    await unlockAudio();
+                    handleCameraClick();
+                  }}
+                >
+                  <Camera className="mr-2 w-5 h-5" /> Camera
+                </button>
+                <button
+                  className="bg-gray-800 p-3 rounded-lg flex items-center justify-center text-lg font-medium text-custom-green whitespace-nowrap"
+                  onClick={async () => {
+                    await unlockAudio();
+                    handleFileUploadClick("video");
+                  }}
+                >
+                  <Video className="mr-2 w-5 h-5" />
+                  Video
+                </button>
+              </div>
             </div>
-          </div>
+          )}
         </>
       )}
 

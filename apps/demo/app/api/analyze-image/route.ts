@@ -36,11 +36,11 @@ export async function POST(request: Request) {
     let promptText: string;
     if (question && question.trim()) {
       // If there's a question, answer it based on what's in the image
-      promptText = `The user is asking: "${question}". You can see this image clearly right now. Look at the image and answer their question directly with a funny, gregarious, and happy personality! Be enthusiastic, use humor, be conversational, and inject cheerfulness into your response. Think of yourself as a friendly, outgoing friend who's excited to help! Describe what you see in the image naturally - you have full visibility of it. Never say you can't see the image or that you're relying on someone else's analysis. You are directly viewing this image.`;
+      promptText = `Look at this image and answer: "${question}". Be direct and concise (2-3 sentences max). Be friendly but brief.`;
     } else {
-      // Default analysis prompt
+      // Default analysis prompt - VERY concise
       promptText =
-        "You can see this image clearly right now. Describe what you see in detail with a funny, gregarious, and happy personality! Include objects, people, text, colors, layout, context, and any other relevant details. Be thorough and specific, but make your description entertaining, enthusiastic, and full of personality. Use humor, be conversational, and inject some cheerfulness into your observations. Think of yourself as a friendly, outgoing friend who's excited to tell someone about what you're seeing! Never say you can't see the image - you are directly viewing it.";
+        "Briefly describe what you see in this image in 1-2 sentences. Be direct and concise.";
     }
 
     // Call GrokAI (xAI) Vision API
@@ -69,7 +69,7 @@ export async function POST(request: Request) {
             ],
           },
         ],
-        max_tokens: 400,
+        max_tokens: 150,
       }),
     });
 

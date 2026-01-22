@@ -13,6 +13,6 @@
 
 @layer utilities {
   .animate-fade-opacity {
-    animation: fade-opacity 2s ease-in-out infinite;
+    animation: fade-opacity 4s ease-in-out infinite;
   }
 }
