@@ -92,6 +92,7 @@ const LiveAvatarSessionComponent: React.FC<{
   const greetingTriggeredRef = useRef<boolean>(false);
   const audioUnlockedRef = useRef<boolean>(false);
   const initialGreetingInterceptedRef = useRef<boolean>(false);
+  const wasMutedBeforeRecordingRef = useRef<boolean>(false);
 
   // Vision mode state: 'streaming' for Go Live, 'snapshot' for Camera button, null for inactive
   const [visionMode, setVisionMode] = useState<"streaming" | "snapshot" | null>(
@@ -1528,12 +1529,18 @@ const LiveAvatarSessionComponent: React.FC<{
     mediaRecorder.start();
     setIsRecording(true);
     
-    // Stop listening during video recording to prevent AI from processing audio
+    // Stop listening and mute microphone during video recording to prevent AI from processing audio
     // The AI should only analyze the video after recording is complete
     if (mode === "FULL") {
       stopListening();
+      // Mute microphone to prevent any audio from being sent to the backend during recording
+      // Store the current mute state so we can restore it after recording
+      wasMutedBeforeRecordingRef.current = isMuted;
+      if (isActive && !isMuted) {
+        mute();
+      }
     }
-  }, [videoStream, mode, sessionRef, repeat, resetToHomeScreen, stopListening]);
+  }, [videoStream, mode, sessionRef, repeat, resetToHomeScreen, stopListening, isActive, isMuted, mute]);
 
   // Stop video recording
   const handleStopRecording = useCallback(() => {
@@ -1541,16 +1548,20 @@ const LiveAvatarSessionComponent: React.FC<{
       mediaRecorderRef.current.stop();
       setIsRecording(false);
       
-      // Restart listening after recording stops
+      // Restart listening and restore microphone state after recording stops
       // The video will be analyzed after recording completes (in mediaRecorder.onstop)
       if (mode === "FULL") {
         // Small delay to ensure recording has fully stopped
         setTimeout(() => {
           startListening();
+          // Restore microphone state: unmute only if it wasn't muted before recording
+          if (isActive && isMuted && !wasMutedBeforeRecordingRef.current) {
+            unmute();
+          }
         }, 500);
       }
     }
-  }, [isRecording, mode, startListening]);
+  }, [isRecording, mode, startListening, isActive, isMuted, unmute]);
 
   // Set video stream to video element when both are available
   useEffect(() => {
