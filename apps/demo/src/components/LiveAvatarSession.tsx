@@ -720,7 +720,7 @@ const LiveAvatarSessionComponent: React.FC<{
         if (mode === "FULL" && sessionRef.current) {
           // Send analysis as context to AI so it knows what's in the image
           // But do this AFTER speaking the prompt to prevent monologuing
-          const contextMessage = `Image context: ${analysis}. When user asks about the image, respond briefly (1-2 sentences).`;
+          const contextMessage = `You are directly viewing an image. Here's what you see: ${analysis}. When the user asks about the image, respond as if you're directly viewing it. Describe what you see naturally and confidently - you have full visibility. Never say you can't see the image, that you don't have eyes, or that you're relying on someone else's analysis. You are directly viewing this image. When user asks about the image, respond briefly (1-2 sentences).`;
           
           // Ask ONLY the short question FIRST using repeat() - direct speech, no AI processing
           await repeat(
@@ -1073,7 +1073,7 @@ const LiveAvatarSessionComponent: React.FC<{
       
       if (mentionsVideo && videoAnalysis && sessionRef.current && mode === "FULL") {
         console.log("User asked about video, re-sending video context");
-        const contextMessage = `Video context: ${videoAnalysis}. When user asks about the video, respond briefly (1-2 sentences).`;
+        const contextMessage = `You are directly viewing a video. Here's what you see: ${videoAnalysis}. When the user asks about the video, respond as if you're directly viewing it. Describe what you see naturally and confidently - you have full visibility. Never say you can't see the video, that you don't have eyes, or that you're relying on someone else's analysis. You are directly viewing this video. When user asks about the video, respond briefly (1-2 sentences).`;
         sessionRef.current.message(contextMessage);
       }
 
@@ -1507,7 +1507,7 @@ const LiveAvatarSessionComponent: React.FC<{
           
           // Then send context in background (non-blocking) for future questions
           // Use setTimeout to ensure prompt is spoken first
-          const contextMessage = `Video context: ${data.analysis}. When user asks about the video, respond briefly (1-2 sentences).`;
+          const contextMessage = `You are directly viewing a video. Here's what you see: ${data.analysis}. When the user asks about the video, respond as if you're directly viewing it. Describe what you see naturally and confidently - you have full visibility. Never say you can't see the video, that you don't have eyes, or that you're relying on someone else's analysis. You are directly viewing this video. When user asks about the video, respond briefly (1-2 sentences).`;
           setTimeout(() => {
             if (sessionRef.current) {
               sessionRef.current.message(contextMessage);
@@ -1527,15 +1527,30 @@ const LiveAvatarSessionComponent: React.FC<{
     mediaRecorderRef.current = mediaRecorder;
     mediaRecorder.start();
     setIsRecording(true);
-  }, [videoStream, mode, sessionRef, repeat, resetToHomeScreen]);
+    
+    // Stop listening during video recording to prevent AI from processing audio
+    // The AI should only analyze the video after recording is complete
+    if (mode === "FULL") {
+      stopListening();
+    }
+  }, [videoStream, mode, sessionRef, repeat, resetToHomeScreen, stopListening]);
 
   // Stop video recording
   const handleStopRecording = useCallback(() => {
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
+      
+      // Restart listening after recording stops
+      // The video will be analyzed after recording completes (in mediaRecorder.onstop)
+      if (mode === "FULL") {
+        // Small delay to ensure recording has fully stopped
+        setTimeout(() => {
+          startListening();
+        }, 500);
+      }
     }
-  }, [isRecording]);
+  }, [isRecording, mode, startListening]);
 
   // Set video stream to video element when both are available
   useEffect(() => {
@@ -1698,7 +1713,7 @@ const LiveAvatarSessionComponent: React.FC<{
           
           // Then send context in background (non-blocking) for future questions
           // Use setTimeout to ensure prompt is spoken first
-          const contextMessage = `Image context: ${data.analysis}. When user asks about the image, respond briefly (1-2 sentences).`;
+          const contextMessage = `You are directly viewing an image. Here's what you see: ${data.analysis}. When the user asks about the image, respond as if you're directly viewing it. Describe what you see naturally and confidently - you have full visibility. Never say you can't see the image, that you don't have eyes, or that you're relying on someone else's analysis. You are directly viewing this image. When user asks about the image, respond briefly (1-2 sentences).`;
           setTimeout(() => {
             if (sessionRef.current) {
               sessionRef.current.message(contextMessage);
@@ -1747,7 +1762,7 @@ const LiveAvatarSessionComponent: React.FC<{
           
           // Then send context in background (non-blocking) for future questions
           // Use setTimeout to ensure prompt is spoken first
-          const contextMessage = `Video context: ${data.analysis}. When user asks about the video, respond briefly (1-2 sentences).`;
+          const contextMessage = `You are directly viewing a video. Here's what you see: ${data.analysis}. When the user asks about the video, respond as if you're directly viewing it. Describe what you see naturally and confidently - you have full visibility. Never say you can't see the video, that you don't have eyes, or that you're relying on someone else's analysis. You are directly viewing this video. When user asks about the video, respond briefly (1-2 sentences).`;
           setTimeout(() => {
             if (sessionRef.current) {
               sessionRef.current.message(contextMessage);
@@ -2069,8 +2084,8 @@ const LiveAvatarSessionComponent: React.FC<{
             )}
 
           {/* ss added */}
-          {/* Hide buttons when in Video mode */}
-          {!isVideoActive && (
+          {/* Hide buttons when in Video mode or when in streaming vision mode (Go Live) */}
+          {!isVideoActive && visionMode !== "streaming" && (
             <div className="fixed bottom-[4rem] left-1/2 -translate-x-1/2 w-[95%] max-w-7xl p-4">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <button

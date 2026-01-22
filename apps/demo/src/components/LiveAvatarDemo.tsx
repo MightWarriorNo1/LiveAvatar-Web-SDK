@@ -66,14 +66,31 @@ export const LiveAvatarDemo = () => {
     }
   };
 
-  const [shouldCompletelyExit, setShouldCompletelyExit] = useState(false);
-
   const handleExit = (completeExit: boolean = false) => {
+    if (completeExit) {
+      // Navigate back to the previous page in browser history
+      // This will take the user back to the original page they came from
+      if (typeof window !== "undefined") {
+        // Check if there's history to go back to
+        if (window.history.length > 1) {
+          window.history.back();
+        } else {
+          // If no history, try to go to the referrer or root
+          const referrer = document.referrer;
+          if (referrer && referrer !== window.location.href) {
+            window.location.href = referrer;
+          } else {
+            // Fallback: go to root
+            window.location.href = "/";
+          }
+        }
+      }
+      // Don't set isExited when completely exiting - we're navigating away
+      return;
+    }
+    // Regular exit - show "Session Ended" message
     setIsExited(true);
     setSessionToken("");
-    if (completeExit) {
-      setShouldCompletelyExit(true);
-    }
   };
 
   if (isLoading) {
@@ -92,11 +109,6 @@ export const LiveAvatarDemo = () => {
         </div>
       </div>
     );
-  }
-
-  // If user clicked stop on initial screen, completely exit (don't show Session Ended page)
-  if (isExited && shouldCompletelyExit) {
-    return null;
   }
 
   if (isExited) {
