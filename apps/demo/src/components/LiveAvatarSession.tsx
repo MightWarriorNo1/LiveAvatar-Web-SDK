@@ -32,7 +32,7 @@ const Button: React.FC<{
 const LiveAvatarSessionComponent: React.FC<{
   mode: "FULL" | "CUSTOM";
   onSessionStopped: () => void;
-  onExit?: () => void;
+  onExit?: (completeExit?: boolean) => void;
 }> = ({ mode, onSessionStopped, onExit }) => {
   const [message, setMessage] = useState("");
   const {
@@ -69,6 +69,7 @@ const LiveAvatarSessionComponent: React.FC<{
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [imageAnalysis, setImageAnalysis] = useState<string | null>(null);
+  const [videoAnalysis, setVideoAnalysis] = useState<string | null>(null);
   const [isAnalyzingImage, setIsAnalyzingImage] = useState(false);
   const [isAnalyzingVideo, setIsAnalyzingVideo] = useState(false);
   const [isProcessingCameraQuestion, setIsProcessingCameraQuestion] =
@@ -90,6 +91,7 @@ const LiveAvatarSessionComponent: React.FC<{
   const isAttachedRef = useRef<boolean>(false);
   const greetingTriggeredRef = useRef<boolean>(false);
   const audioUnlockedRef = useRef<boolean>(false);
+  const initialGreetingInterceptedRef = useRef<boolean>(false);
 
   // Vision mode state: 'streaming' for Go Live, 'snapshot' for Camera button, null for inactive
   const [visionMode, setVisionMode] = useState<"streaming" | "snapshot" | null>(
@@ -110,6 +112,7 @@ const LiveAvatarSessionComponent: React.FC<{
       onSessionStopped();
       // Reset greeting trigger when session disconnects
       greetingTriggeredRef.current = false;
+      initialGreetingInterceptedRef.current = false; // Reset greeting interception
     }
   }, [sessionState, onSessionStopped]);
 
@@ -147,11 +150,12 @@ const LiveAvatarSessionComponent: React.FC<{
     setFallbackImage(null);
     setFallbackImagePreview(null);
 
-    // Clear analysis states
+    // Clear analysis states (but keep videoAnalysis so avatar can still reference it)
     setImageAnalysis(null);
     setIsAnalyzingImage(false);
     setIsAnalyzingVideo(false);
     setIsProcessingCameraQuestion(false);
+    // Note: videoAnalysis is NOT cleared so avatar can still reference uploaded videos
 
     // Reset processing refs
     lastProcessedQuestionRef.current = "";
@@ -188,12 +192,12 @@ const LiveAvatarSessionComponent: React.FC<{
   // Wrapper for stopSession - ends session on home screen, resets to home screen otherwise
   const handleStopSession = useCallback(() => {
     if (isOnHomeScreen()) {
-      // On home screen: exit the app
+      // On home screen: completely exit the app (don't show Session Ended page)
       greetingTriggeredRef.current = false; // Reset greeting trigger
       stopSession();
-      // Call onExit callback if provided (to exit app instead of restarting)
+      // Call onExit callback with completeExit=true to completely exit app
       if (onExit) {
-        onExit();
+        onExit(true);
       }
     } else {
       // Not on home screen: reset to home screen (keep session)
@@ -489,6 +493,28 @@ const LiveAvatarSessionComponent: React.FC<{
       startSession();
     }
   }, [startSession, sessionState]);
+
+  // Intercept and interrupt the initial greeting from the backend
+  useEffect(() => {
+    if (sessionState === SessionState.CONNECTED && sessionRef.current) {
+      const handleAvatarSpeakStarted = () => {
+        // Only intercept the first greeting
+        if (!initialGreetingInterceptedRef.current) {
+          initialGreetingInterceptedRef.current = true;
+          // Immediately interrupt the greeting
+          interrupt();
+        }
+      };
+
+      sessionRef.current.on(AgentEventsEnum.AVATAR_SPEAK_STARTED, handleAvatarSpeakStarted);
+
+      return () => {
+        if (sessionRef.current) {
+          sessionRef.current.off(AgentEventsEnum.AVATAR_SPEAK_STARTED, handleAvatarSpeakStarted);
+        }
+      };
+    }
+  }, [sessionState, interrupt, sessionRef]);
 
   // Cleanup camera stream on unmount
   useEffect(() => {
@@ -1040,6 +1066,17 @@ const LiveAvatarSessionComponent: React.FC<{
         return;
       }
 
+      // If user asks about video and videoAnalysis exists, re-send video context
+      const userTextLower = userText.toLowerCase();
+      const videoKeywords = ["video", "recording", "clip", "footage", "film"];
+      const mentionsVideo = videoKeywords.some(keyword => userTextLower.includes(keyword));
+      
+      if (mentionsVideo && videoAnalysis && sessionRef.current && mode === "FULL") {
+        console.log("User asked about video, re-sending video context");
+        const contextMessage = `Video context: ${videoAnalysis}. When user asks about the video, respond briefly (1-2 sentences).`;
+        sessionRef.current.message(contextMessage);
+      }
+
       // Process the question using the reusable function (only in streaming mode)
       await processCameraQuestion(userText, false);
     };
@@ -1457,6 +1494,9 @@ const LiveAvatarSessionComponent: React.FC<{
 
         const data = await response.json();
         console.log("Video analyzed successfully");
+        
+        // Store video analysis in state so it persists even after closing video button
+        setVideoAnalysis(data.analysis);
 
         // For FULL mode, send the analysis as context to the AI
         if (mode === "FULL" && sessionRef.current) {
@@ -1694,6 +1734,9 @@ const LiveAvatarSessionComponent: React.FC<{
 
         const data = await response.json();
         console.log("Video analyzed successfully");
+        
+        // Store video analysis in state so it persists even after closing video button
+        setVideoAnalysis(data.analysis);
 
         // For FULL mode, send the analysis as context to the AI
         if (mode === "FULL" && sessionRef.current) {

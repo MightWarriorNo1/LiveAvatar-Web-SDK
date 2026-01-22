@@ -66,9 +66,14 @@ export const LiveAvatarDemo = () => {
     }
   };
 
-  const handleExit = () => {
+  const [shouldCompletelyExit, setShouldCompletelyExit] = useState(false);
+
+  const handleExit = (completeExit: boolean = false) => {
     setIsExited(true);
     setSessionToken("");
+    if (completeExit) {
+      setShouldCompletelyExit(true);
+    }
   };
 
   if (isLoading) {
@@ -87,6 +92,11 @@ export const LiveAvatarDemo = () => {
         </div>
       </div>
     );
+  }
+
+  // If user clicked stop on initial screen, completely exit (don't show Session Ended page)
+  if (isExited && shouldCompletelyExit) {
+    return null;
   }
 
   if (isExited) {
