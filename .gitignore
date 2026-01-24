@@ -27,6 +27,8 @@ out/
 build
 dist
 lib
+# Exception: apps/demo/lib contains source code, not build output
+!apps/demo/lib/
 docs
 
 
