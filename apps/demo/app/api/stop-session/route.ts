@@ -1,9 +1,15 @@
 import { API_URL } from "../secrets";
+import { usageTracker } from "../../../lib/usage-tracker";
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { session_token } = body;
+    const { session_token, session_id } = body;
+
+    // Track session end if we have session_id
+    if (session_id) {
+      usageTracker.trackSessionEnd(session_id);
+    }
 
     if (!session_token) {
       return new Response(

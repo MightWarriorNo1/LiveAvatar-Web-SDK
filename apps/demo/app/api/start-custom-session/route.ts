@@ -1,6 +1,48 @@
 import { API_KEY, API_URL, AVATAR_ID } from "../secrets";
+import { rateLimit, createRateLimitResponse } from "../../../lib/rate-limit";
+import { usageTracker } from "../../../lib/usage-tracker";
+import { getLimitsConfig } from "../../../lib/limits-config";
 
-export async function POST() {
+export async function POST(request: Request) {
+  const limits = getLimitsConfig();
+
+  // Check rate limit
+  const rateLimitResult = await rateLimit(
+    request,
+    limits.rateLimit.startSession.maxRequests,
+    limits.rateLimit.startSession.windowMs,
+  );
+
+  if (!rateLimitResult.allowed) {
+    return createRateLimitResponse(rateLimitResult.resetTime);
+  }
+
+  // Check daily usage caps
+  if (usageTracker.isDailyLimitExceeded(limits.usageCaps.daily.maxSessions)) {
+    return new Response(
+      JSON.stringify({
+        error: "Daily session limit exceeded. Please try again tomorrow.",
+      }),
+      {
+        status: 429,
+        headers: { "Content-Type": "application/json" },
+      },
+    );
+  }
+
+  // Check hourly usage caps
+  if (usageTracker.isHourlyLimitExceeded(limits.usageCaps.hourly.maxSessions)) {
+    return new Response(
+      JSON.stringify({
+        error: "Hourly session limit exceeded. Please try again later.",
+      }),
+      {
+        status: 429,
+        headers: { "Content-Type": "application/json" },
+      },
+    );
+  }
+
   let session_token = "";
   let session_id = "";
   try {
@@ -39,6 +81,11 @@ export async function POST() {
 
     session_token = data.data.session_token;
     session_id = data.data.session_id;
+
+    // Track session start
+    if (session_id) {
+      usageTracker.trackSessionStart(session_id);
+    }
   } catch (error: unknown) {
     return new Response(JSON.stringify({ error: (error as Error).message }), {
       status: 500,

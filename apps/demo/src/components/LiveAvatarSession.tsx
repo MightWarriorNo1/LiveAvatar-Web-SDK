@@ -93,6 +93,12 @@ const LiveAvatarSessionComponent: React.FC<{
   const audioUnlockedRef = useRef<boolean>(false);
   const initialGreetingInterceptedRef = useRef<boolean>(false);
   const wasMutedBeforeRecordingRef = useRef<boolean>(false);
+  const sessionStartTimeRef = useRef<number | null>(null);
+  const sessionDurationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const MAX_SESSION_DURATION_MINUTES = parseInt(
+    process.env.NEXT_PUBLIC_MAX_SESSION_DURATION_MINUTES || "10",
+    10,
+  ); // 10 minutes = 20 credits per session
 
   // Vision mode state: 'streaming' for Go Live, 'snapshot' for Camera button, null for inactive
   const [visionMode, setVisionMode] = useState<"streaming" | "snapshot" | null>(
@@ -114,8 +120,34 @@ const LiveAvatarSessionComponent: React.FC<{
       // Reset greeting trigger when session disconnects
       greetingTriggeredRef.current = false;
       initialGreetingInterceptedRef.current = false; // Reset greeting interception
+      // Clear session duration tracking
+      sessionStartTimeRef.current = null;
+      if (sessionDurationTimeoutRef.current) {
+        clearTimeout(sessionDurationTimeoutRef.current);
+        sessionDurationTimeoutRef.current = null;
+      }
+    } else if (sessionState === SessionState.CONNECTED) {
+      // Track session start time and set up duration enforcement
+      if (!sessionStartTimeRef.current) {
+        sessionStartTimeRef.current = Date.now();
+        
+        // Get max duration from session or use default
+        const maxDurationSeconds = sessionRef.current?.maxSessionDuration 
+          ? sessionRef.current.maxSessionDuration 
+          : MAX_SESSION_DURATION_MINUTES * 60;
+        
+        // Set timeout to stop session when duration limit is reached
+        sessionDurationTimeoutRef.current = setTimeout(() => {
+          if (sessionRef.current && sessionState === SessionState.CONNECTED) {
+            console.log("Session duration limit reached, stopping session");
+            stopSession().catch((error) => {
+              console.error("Error stopping session after duration limit:", error);
+            });
+          }
+        }, maxDurationSeconds * 1000);
+      }
     }
-  }, [sessionState, onSessionStopped]);
+  }, [sessionState, onSessionStopped, stopSession, sessionRef, MAX_SESSION_DURATION_MINUTES]);
 
   // Function to reset to home screen (close camera, clear uploads, but keep session)
   const resetToHomeScreen = useCallback(() => {

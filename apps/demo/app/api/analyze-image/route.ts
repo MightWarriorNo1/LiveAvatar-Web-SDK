@@ -1,6 +1,61 @@
 import { GROKAI_API_KEY } from "../secrets";
+import { rateLimit, createRateLimitResponse } from "../../../lib/rate-limit";
+import { usageTracker } from "../../../lib/usage-tracker";
+import { getLimitsConfig } from "../../../lib/limits-config";
 
 export async function POST(request: Request) {
+  const limits = getLimitsConfig();
+
+  // Check rate limit
+  const rateLimitResult = await rateLimit(
+    request,
+    limits.rateLimit.analyzeImage.maxRequests,
+    limits.rateLimit.analyzeImage.windowMs,
+  );
+
+  if (!rateLimitResult.allowed) {
+    return createRateLimitResponse(rateLimitResult.resetTime);
+  }
+
+  // Check daily usage caps
+  if (
+    usageTracker.isDailyLimitExceeded(
+      undefined,
+      limits.usageCaps.daily.maxApiCalls,
+    )
+  ) {
+    return new Response(
+      JSON.stringify({
+        error: "Daily API call limit exceeded. Please try again tomorrow.",
+      }),
+      {
+        status: 429,
+        headers: { "Content-Type": "application/json" },
+      },
+    );
+  }
+
+  // Check hourly usage caps
+  if (
+    usageTracker.isHourlyLimitExceeded(
+      undefined,
+      limits.usageCaps.hourly.maxApiCalls,
+    )
+  ) {
+    return new Response(
+      JSON.stringify({
+        error: "Hourly API call limit exceeded. Please try again later.",
+      }),
+      {
+        status: 429,
+        headers: { "Content-Type": "application/json" },
+      },
+    );
+  }
+
+  // Track API call
+  usageTracker.trackApiCall();
+
   try {
     const formData = await request.formData();
     const file = formData.get("image") as File;
