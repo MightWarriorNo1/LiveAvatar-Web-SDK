@@ -1865,7 +1865,7 @@ const LiveAvatarSessionComponent: React.FC<{
       {(isAnalyzingImage || isAnalyzingVideo) && visionMode !== "streaming" && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-70">
           <div className="bg-gray-800 text-white px-8 py-6 rounded-lg shadow-2xl">
-            <p className="text-xl font-semibold text-center">
+            <p className="text-xl font-semibold text-center font-aptos">
               {isAnalyzingImage ? "Analyzing Photo...." : "Analyzing Video...."}
             </p>
           </div>
@@ -1874,7 +1874,7 @@ const LiveAvatarSessionComponent: React.FC<{
 
       {/* Text overlays at the top */}
       <div className="absolute top-0 left-0 right-0 z-10 flex flex-col items-center pt-4 pb-2">
-        <h1 className="text-custom-green text-2xl font-semibold">
+        <h1 className="text-custom-green text-2xl font-semibold font-aptos">
           iSolveUrProblems.ai - beta
         </h1>
         {microphoneWarning && (
@@ -1973,7 +1973,7 @@ const LiveAvatarSessionComponent: React.FC<{
               // Loading fallback image
               <div className="flex flex-col items-center justify-center w-full h-full max-w-4xl max-h-[calc(100vh-8rem)] bg-gray-900 rounded-lg p-8">
                 <div className="text-center text-white">
-                  <p className="text-lg">Loading...</p>
+                  <p className="text-lg font-aptos">Loading...</p>
                 </div>
               </div>
             ) : fallbackImagePreview ? (
@@ -2083,7 +2083,7 @@ const LiveAvatarSessionComponent: React.FC<{
               disabled={isProcessingCameraQuestion || isAnalyzingImage || isDebugProcessingRef.current}
             >
               {isAnalyzingImage || isDebugProcessingRef.current ? (
-                <>🔄 Analyzing...</>
+                <span className="font-aptos">🔄 Analyzing...</span>
               ) : (
                 <>🔍 Debug: Analyze Image</>
               )}
@@ -2117,7 +2117,7 @@ const LiveAvatarSessionComponent: React.FC<{
           {/* Positioned just above Stop button when four boxes are not visible */}
           {visionMode === "streaming" && isProcessingCameraQuestion && (
               <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-30">
-                <p className="text-custom-green text-2xl font-semibold text-center drop-shadow-lg">
+                <p className="text-custom-green text-2xl font-semibold text-center drop-shadow-lg font-aptos">
                   <span className="inline-flex items-center">
                     Analyzing
                     <span className="inline-block animate-pulse">...</span>

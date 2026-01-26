@@ -6,6 +6,9 @@ module.exports = {
       colors: {
         'custom-green': 'rgba(152, 221, 148, 0.82)',  // Add RGBA color here
       },
+      fontFamily: {
+        'aptos': ['Aptos', 'sans-serif'],
+      },
     },
   },
   plugins: [],

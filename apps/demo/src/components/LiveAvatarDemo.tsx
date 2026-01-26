@@ -186,7 +186,7 @@ export const LiveAvatarDemo = () => {
   if (isLoading) {
     return (
       <div className="w-full h-full flex flex-col items-center justify-center gap-4">
-        <div className="text-white text-xl">Loading...</div>
+        <div className="text-white text-xl font-aptos">Loading...</div>
       </div>
     );
   }
@@ -205,7 +205,7 @@ export const LiveAvatarDemo = () => {
     return (
       <div className="w-full h-full flex flex-col items-center justify-center gap-4">
         <div className="text-white text-2xl font-semibold">Session Ended</div>
-        <div className="text-gray-400 text-lg">
+        <div className="text-gray-400 text-lg font-aptos">
           Thank you for using iSolveUrProblems.ai
         </div>
         <button
