@@ -525,7 +525,6 @@ const LiveAvatarSessionComponent: React.FC<{
       }
     }
   }, [
-    triggerGreetingIfNeeded,
     visionMode,
     cameraAvailable,
     fallbackImage,
