@@ -95,6 +95,7 @@ const LiveAvatarSessionComponent: React.FC<{
   const wasMutedBeforeRecordingRef = useRef<boolean>(false);
   const sessionStartTimeRef = useRef<number | null>(null);
   const sessionDurationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [isAppFullyLoaded, setIsAppFullyLoaded] = useState(false);
   const MAX_SESSION_DURATION_MINUTES = parseInt(
     process.env.NEXT_PUBLIC_MAX_SESSION_DURATION_MINUTES || "10",
     10,
@@ -120,6 +121,7 @@ const LiveAvatarSessionComponent: React.FC<{
       // Reset greeting trigger when session disconnects
       greetingTriggeredRef.current = false;
       initialGreetingInterceptedRef.current = false; // Reset greeting interception
+      setIsAppFullyLoaded(false); // Reset app loaded state
       // Clear session duration tracking
       sessionStartTimeRef.current = null;
       if (sessionDurationTimeoutRef.current) {
@@ -378,11 +380,20 @@ const LiveAvatarSessionComponent: React.FC<{
     };
   }, [unlockAudio]);
 
-  // DISABLED: Function to trigger greeting - removed to prevent automatic "Hi" on load
-  // Greeting should only happen on explicit user action, not automatically
-  const triggerGreetingIfNeeded = useCallback(() => {
-    // Do nothing - greeting disabled to prevent mouth movement during loading
-  }, []);
+  // Trigger greeting after app is fully loaded
+  useEffect(() => {
+    if (isAppFullyLoaded && !greetingTriggeredRef.current && sessionRef.current && mode === "FULL") {
+      greetingTriggeredRef.current = true;
+      // Wait a moment for everything to settle, then trigger intro
+      const timeoutId = setTimeout(async () => {
+        if (sessionRef.current) {
+          // Send the intro greeting
+          await repeat("Hi, I'm 6, your AI buddy. How can I help you today?");
+        }
+      }, 1000);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [isAppFullyLoaded, sessionRef, mode, repeat]);
 
   // Function to load fallback image from public folder
   const loadFallbackImage = useCallback(async (): Promise<File> => {
@@ -527,12 +538,25 @@ const LiveAvatarSessionComponent: React.FC<{
     }
   }, [startSession, sessionState]);
 
+  // Track when app is fully loaded (session connected AND stream ready)
+  useEffect(() => {
+    if (sessionState === SessionState.CONNECTED && isStreamReady) {
+      // Small delay to ensure everything is ready
+      const timeoutId = setTimeout(() => {
+        setIsAppFullyLoaded(true);
+      }, 500);
+      return () => clearTimeout(timeoutId);
+    } else {
+      setIsAppFullyLoaded(false);
+    }
+  }, [sessionState, isStreamReady]);
+
   // Intercept and interrupt the initial greeting from the backend
   useEffect(() => {
     if (sessionState === SessionState.CONNECTED && sessionRef.current) {
       const handleAvatarSpeakStarted = () => {
-        // Only intercept the first greeting
-        if (!initialGreetingInterceptedRef.current) {
+        // Only intercept the first greeting (before app is fully loaded)
+        if (!initialGreetingInterceptedRef.current && !isAppFullyLoaded) {
           initialGreetingInterceptedRef.current = true;
           // Immediately interrupt the greeting
           interrupt();
@@ -547,7 +571,7 @@ const LiveAvatarSessionComponent: React.FC<{
         }
       };
     }
-  }, [sessionState, interrupt, sessionRef]);
+  }, [sessionState, interrupt, sessionRef, isAppFullyLoaded]);
 
   // Cleanup camera stream on unmount
   useEffect(() => {
@@ -904,25 +928,47 @@ const LiveAvatarSessionComponent: React.FC<{
       if (userText.length === 0 && skipDuplicateCheck) {
         // This is initial recognition when Go Live starts - use ONLY the specific question, no analysis
         responseMessage = "What problems can I help you solve that we're looking at right now?";
+        
+        // Send analysis as context to AI so it knows what's in the image for future questions
+        if (mode === "FULL" && sessionRef.current) {
+          const contextMessage = `You are directly viewing an image. Here's what you see: ${analysis}. When the user asks about the image, respond as if you're directly viewing it. Describe what you see naturally and confidently - you have full visibility. Never say you can't see the image, that you don't have eyes, or that you're relying on someone else's analysis. You are directly viewing this image. When user asks about the image, respond briefly (1-2 sentences).`;
+          // Send context in background (non-blocking) for future questions
+          setTimeout(() => {
+            if (sessionRef.current) {
+              sessionRef.current.message(contextMessage);
+            }
+          }, 100);
+        }
       } else {
-        // For user questions, use the analysis but ensure it's concise
-        // The API should return concise analysis, but we'll use it directly
-        responseMessage = analysis;
+        // For user questions, send the analysis as context along with the user's question
+        // This ensures the AI has the context when responding
+        if (mode === "FULL" && sessionRef.current) {
+          // Combine context and question into a single message to avoid duplicate responses
+          const combinedMessage = `You are directly viewing an image. Here's what you see: ${analysis}. When the user asks about the image, respond as if you're directly viewing it. Describe what you see naturally and confidently - you have full visibility. Never say you can't see the image, that you don't have eyes, or that you're relying on someone else's analysis. You are directly viewing this image. Now the user asks: "${userText}". Please respond briefly (1-2 sentences).`;
+          
+          // Send the combined message so AI can respond with context
+          sessionRef.current.message(combinedMessage);
+          
+          // Don't use repeat() here - let the AI respond naturally with context
+          // The "Analyzing..." will hide when avatar starts speaking
+          return; // Exit early - AI will respond via message()
+        } else {
+          // Fallback: use analysis as response message
+          responseMessage = analysis;
+        }
       }
 
         // Store the response to filter out avatar transcriptions later
-        lastAvatarResponseRef.current = responseMessage.substring(0, 100); // Store first 100 chars for comparison
+        if (responseMessage) {
+          lastAvatarResponseRef.current = responseMessage.substring(0, 100); // Store first 100 chars for comparison
 
-        // Hide loading is handled by isProcessingCameraQuestion state
-
-        // Send the response to the avatar - use repeat() to speak directly without AI processing
-        // IMPORTANT: Use repeat() which speaks directly without AI processing to prevent monologuing
-        if (mode === "FULL") {
-          console.log("Sending response to avatar using repeat() - direct speech only");
-          // Use repeat() to make avatar speak ONLY this message, no AI processing = no monologue
-          await repeat(responseMessage);
-          // CRITICAL: Do NOT send any additional messages to prevent continued talking
-          // Do NOT use sessionRef.current.message() here as it triggers AI processing and monologuing
+          // Send the response to the avatar - use repeat() to speak directly without AI processing
+          // IMPORTANT: Use repeat() which speaks directly without AI processing to prevent monologuing
+          if (mode === "FULL") {
+            console.log("Sending response to avatar using repeat() - direct speech only");
+            // Use repeat() to make avatar speak ONLY this message, no AI processing = no monologue
+            await repeat(responseMessage);
+          }
         }
 
         // Reset the last processed question after a delay to allow the same question to be asked again later
@@ -941,10 +987,12 @@ const LiveAvatarSessionComponent: React.FC<{
         processingTimeoutRef.current = setTimeout(() => {
           lastProcessedQuestionRef.current = "";
         }, 2000);
-      } finally {
+        // Hide analyzing state on error
         setIsProcessingCameraQuestion(false);
         setIsAnalyzingImage(false);
-        // Loading will be hidden when avatar starts talking (via useEffect) or already hidden above
+      } finally {
+        // Don't hide "Analyzing..." here if successful - keep it visible until avatar starts speaking
+        // It will be hidden when avatar starts talking (via useEffect below)
       }
     },
     [
@@ -1189,12 +1237,13 @@ const LiveAvatarSessionComponent: React.FC<{
     processCameraQuestion,
   ]);
 
-  // Hide loading text when avatar starts talking
+  // Hide "Analyzing..." text when avatar starts talking (for streaming vision mode)
   useEffect(() => {
-    if (isAvatarTalking && showVisionLoading) {
-      setShowVisionLoading(false);
+    if (isAvatarTalking && isProcessingCameraQuestion && visionMode === "streaming") {
+      setIsProcessingCameraQuestion(false);
+      setIsAnalyzingImage(false);
     }
-  }, [isAvatarTalking, showVisionLoading]);
+  }, [isAvatarTalking, isProcessingCameraQuestion, visionMode]);
 
   // Automatically analyze and speak when camera mode is activated
   // DISABLED: This was causing automatic snap when camera opens on mobile
@@ -1858,6 +1907,15 @@ const LiveAvatarSessionComponent: React.FC<{
       )}
     </>
   );
+
+  // Show loading screen until app is fully loaded
+  if (!isAppFullyLoaded) {
+    return (
+      <div className="fixed inset-0 w-screen h-screen bg-black flex flex-col items-center justify-center">
+        <div className="text-white text-xl font-aptos">Loading...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 w-screen h-screen bg-black flex flex-col">
