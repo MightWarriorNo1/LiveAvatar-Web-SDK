@@ -93,13 +93,6 @@ const LiveAvatarSessionComponent: React.FC<{
   const audioUnlockedRef = useRef<boolean>(false);
   const initialGreetingInterceptedRef = useRef<boolean>(false);
   const wasMutedBeforeRecordingRef = useRef<boolean>(false);
-  const sessionStartTimeRef = useRef<number | null>(null);
-  const sessionDurationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const [isAppFullyLoaded, setIsAppFullyLoaded] = useState(false);
-  const MAX_SESSION_DURATION_MINUTES = parseInt(
-    process.env.NEXT_PUBLIC_MAX_SESSION_DURATION_MINUTES || "10",
-    10,
-  ); // 10 minutes = 20 credits per session
 
   // Vision mode state: 'streaming' for Go Live, 'snapshot' for Camera button, null for inactive
   const [visionMode, setVisionMode] = useState<"streaming" | "snapshot" | null>(
@@ -121,35 +114,8 @@ const LiveAvatarSessionComponent: React.FC<{
       // Reset greeting trigger when session disconnects
       greetingTriggeredRef.current = false;
       initialGreetingInterceptedRef.current = false; // Reset greeting interception
-      setIsAppFullyLoaded(false); // Reset app loaded state
-      // Clear session duration tracking
-      sessionStartTimeRef.current = null;
-      if (sessionDurationTimeoutRef.current) {
-        clearTimeout(sessionDurationTimeoutRef.current);
-        sessionDurationTimeoutRef.current = null;
-      }
-    } else if (sessionState === SessionState.CONNECTED) {
-      // Track session start time and set up duration enforcement
-      if (!sessionStartTimeRef.current) {
-        sessionStartTimeRef.current = Date.now();
-        
-        // Get max duration from session or use default
-        const maxDurationSeconds = sessionRef.current?.maxSessionDuration 
-          ? sessionRef.current.maxSessionDuration 
-          : MAX_SESSION_DURATION_MINUTES * 60;
-        
-        // Set timeout to stop session when duration limit is reached
-        sessionDurationTimeoutRef.current = setTimeout(() => {
-          if (sessionRef.current && sessionState === SessionState.CONNECTED) {
-            console.log("Session duration limit reached, stopping session");
-            stopSession().catch((error) => {
-              console.error("Error stopping session after duration limit:", error);
-            });
-          }
-        }, maxDurationSeconds * 1000);
-      }
     }
-  }, [sessionState, onSessionStopped, stopSession, sessionRef, MAX_SESSION_DURATION_MINUTES]);
+  }, [sessionState, onSessionStopped]);
 
   // Function to reset to home screen (close camera, clear uploads, but keep session)
   const resetToHomeScreen = useCallback(() => {
@@ -380,20 +346,11 @@ const LiveAvatarSessionComponent: React.FC<{
     };
   }, [unlockAudio]);
 
-  // Trigger greeting after app is fully loaded
-  useEffect(() => {
-    if (isAppFullyLoaded && !greetingTriggeredRef.current && sessionRef.current && mode === "FULL") {
-      greetingTriggeredRef.current = true;
-      // Wait a moment for everything to settle, then trigger intro
-      const timeoutId = setTimeout(async () => {
-        if (sessionRef.current) {
-          // Send the intro greeting
-          await repeat("Hi, I'm 6, your AI buddy. How can I help you today?");
-        }
-      }, 1000);
-      return () => clearTimeout(timeoutId);
-    }
-  }, [isAppFullyLoaded, sessionRef, mode, repeat]);
+  // DISABLED: Function to trigger greeting - removed to prevent automatic "Hi" on load
+  // Greeting should only happen on explicit user action, not automatically
+  const triggerGreetingIfNeeded = useCallback(() => {
+    // Do nothing - greeting disabled to prevent mouth movement during loading
+  }, []);
 
   // Function to load fallback image from public folder
   const loadFallbackImage = useCallback(async (): Promise<File> => {
@@ -525,6 +482,7 @@ const LiveAvatarSessionComponent: React.FC<{
       }
     }
   }, [
+    triggerGreetingIfNeeded,
     visionMode,
     cameraAvailable,
     fallbackImage,
@@ -537,25 +495,12 @@ const LiveAvatarSessionComponent: React.FC<{
     }
   }, [startSession, sessionState]);
 
-  // Track when app is fully loaded (session connected AND stream ready)
-  useEffect(() => {
-    if (sessionState === SessionState.CONNECTED && isStreamReady) {
-      // Small delay to ensure everything is ready
-      const timeoutId = setTimeout(() => {
-        setIsAppFullyLoaded(true);
-      }, 500);
-      return () => clearTimeout(timeoutId);
-    } else {
-      setIsAppFullyLoaded(false);
-    }
-  }, [sessionState, isStreamReady]);
-
   // Intercept and interrupt the initial greeting from the backend
   useEffect(() => {
     if (sessionState === SessionState.CONNECTED && sessionRef.current) {
       const handleAvatarSpeakStarted = () => {
-        // Only intercept the first greeting (before app is fully loaded)
-        if (!initialGreetingInterceptedRef.current && !isAppFullyLoaded) {
+        // Only intercept the first greeting
+        if (!initialGreetingInterceptedRef.current) {
           initialGreetingInterceptedRef.current = true;
           // Immediately interrupt the greeting
           interrupt();
@@ -570,7 +515,7 @@ const LiveAvatarSessionComponent: React.FC<{
         }
       };
     }
-  }, [sessionState, interrupt, sessionRef, isAppFullyLoaded]);
+  }, [sessionState, interrupt, sessionRef]);
 
   // Cleanup camera stream on unmount
   useEffect(() => {
@@ -927,47 +872,25 @@ const LiveAvatarSessionComponent: React.FC<{
       if (userText.length === 0 && skipDuplicateCheck) {
         // This is initial recognition when Go Live starts - use ONLY the specific question, no analysis
         responseMessage = "What problems can I help you solve that we're looking at right now?";
-        
-        // Send analysis as context to AI so it knows what's in the image for future questions
-        if (mode === "FULL" && sessionRef.current) {
-          const contextMessage = `You are directly viewing an image. Here's what you see: ${analysis}. When the user asks about the image, respond as if you're directly viewing it. Describe what you see naturally and confidently - you have full visibility. Never say you can't see the image, that you don't have eyes, or that you're relying on someone else's analysis. You are directly viewing this image. When user asks about the image, respond briefly (1-2 sentences).`;
-          // Send context in background (non-blocking) for future questions
-          setTimeout(() => {
-            if (sessionRef.current) {
-              sessionRef.current.message(contextMessage);
-            }
-          }, 100);
-        }
       } else {
-        // For user questions, send the analysis as context along with the user's question
-        // This ensures the AI has the context when responding
-        if (mode === "FULL" && sessionRef.current) {
-          // Combine context and question into a single message to avoid duplicate responses
-          const combinedMessage = `You are directly viewing an image. Here's what you see: ${analysis}. When the user asks about the image, respond as if you're directly viewing it. Describe what you see naturally and confidently - you have full visibility. Never say you can't see the image, that you don't have eyes, or that you're relying on someone else's analysis. You are directly viewing this image. Now the user asks: "${userText}". Please respond briefly (1-2 sentences).`;
-          
-          // Send the combined message so AI can respond with context
-          sessionRef.current.message(combinedMessage);
-          
-          // Don't use repeat() here - let the AI respond naturally with context
-          // The "Analyzing..." will hide when avatar starts speaking
-          return; // Exit early - AI will respond via message()
-        } else {
-          // Fallback: use analysis as response message
-          responseMessage = analysis;
-        }
+        // For user questions, use the analysis but ensure it's concise
+        // The API should return concise analysis, but we'll use it directly
+        responseMessage = analysis;
       }
 
         // Store the response to filter out avatar transcriptions later
-        if (responseMessage) {
-          lastAvatarResponseRef.current = responseMessage.substring(0, 100); // Store first 100 chars for comparison
+        lastAvatarResponseRef.current = responseMessage.substring(0, 100); // Store first 100 chars for comparison
 
-          // Send the response to the avatar - use repeat() to speak directly without AI processing
-          // IMPORTANT: Use repeat() which speaks directly without AI processing to prevent monologuing
-          if (mode === "FULL") {
-            console.log("Sending response to avatar using repeat() - direct speech only");
-            // Use repeat() to make avatar speak ONLY this message, no AI processing = no monologue
-            await repeat(responseMessage);
-          }
+        // Hide loading is handled by isProcessingCameraQuestion state
+
+        // Send the response to the avatar - use repeat() to speak directly without AI processing
+        // IMPORTANT: Use repeat() which speaks directly without AI processing to prevent monologuing
+        if (mode === "FULL") {
+          console.log("Sending response to avatar using repeat() - direct speech only");
+          // Use repeat() to make avatar speak ONLY this message, no AI processing = no monologue
+          await repeat(responseMessage);
+          // CRITICAL: Do NOT send any additional messages to prevent continued talking
+          // Do NOT use sessionRef.current.message() here as it triggers AI processing and monologuing
         }
 
         // Reset the last processed question after a delay to allow the same question to be asked again later
@@ -986,12 +909,10 @@ const LiveAvatarSessionComponent: React.FC<{
         processingTimeoutRef.current = setTimeout(() => {
           lastProcessedQuestionRef.current = "";
         }, 2000);
-        // Hide analyzing state on error
+      } finally {
         setIsProcessingCameraQuestion(false);
         setIsAnalyzingImage(false);
-      } finally {
-        // Don't hide "Analyzing..." here if successful - keep it visible until avatar starts speaking
-        // It will be hidden when avatar starts talking (via useEffect below)
+        // Loading will be hidden when avatar starts talking (via useEffect) or already hidden above
       }
     },
     [
@@ -1236,13 +1157,12 @@ const LiveAvatarSessionComponent: React.FC<{
     processCameraQuestion,
   ]);
 
-  // Hide "Analyzing..." text when avatar starts talking (for streaming vision mode)
+  // Hide loading text when avatar starts talking
   useEffect(() => {
-    if (isAvatarTalking && isProcessingCameraQuestion && visionMode === "streaming") {
-      setIsProcessingCameraQuestion(false);
-      setIsAnalyzingImage(false);
+    if (isAvatarTalking && showVisionLoading) {
+      setShowVisionLoading(false);
     }
-  }, [isAvatarTalking, isProcessingCameraQuestion, visionMode]);
+  }, [isAvatarTalking, showVisionLoading]);
 
   // Automatically analyze and speak when camera mode is activated
   // DISABLED: This was causing automatic snap when camera opens on mobile
@@ -1907,22 +1827,13 @@ const LiveAvatarSessionComponent: React.FC<{
     </>
   );
 
-  // Show loading screen until app is fully loaded
-  if (!isAppFullyLoaded) {
-    return (
-      <div className="fixed inset-0 w-screen h-screen bg-black flex flex-col items-center justify-center">
-        <div className="text-white text-xl font-aptos">Loading...</div>
-      </div>
-    );
-  }
-
   return (
     <div className="fixed inset-0 w-screen h-screen bg-black flex flex-col">
       {/* Analyzing popup overlay - only show for snapshot mode, not streaming mode */}
       {(isAnalyzingImage || isAnalyzingVideo) && visionMode !== "streaming" && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-70">
           <div className="bg-gray-800 text-white px-8 py-6 rounded-lg shadow-2xl">
-            <p className="text-xl font-semibold text-center font-aptos">
+            <p className="text-xl font-semibold text-center">
               {isAnalyzingImage ? "Analyzing Photo...." : "Analyzing Video...."}
             </p>
           </div>
@@ -1931,7 +1842,7 @@ const LiveAvatarSessionComponent: React.FC<{
 
       {/* Text overlays at the top */}
       <div className="absolute top-0 left-0 right-0 z-10 flex flex-col items-center pt-4 pb-2">
-        <h1 className="text-custom-green text-2xl font-semibold font-aptos">
+        <h1 className="text-custom-green text-2xl font-semibold">
           iSolveUrProblems.ai - beta
         </h1>
         {microphoneWarning && (
@@ -2030,7 +1941,7 @@ const LiveAvatarSessionComponent: React.FC<{
               // Loading fallback image
               <div className="flex flex-col items-center justify-center w-full h-full max-w-4xl max-h-[calc(100vh-8rem)] bg-gray-900 rounded-lg p-8">
                 <div className="text-center text-white">
-                  <p className="text-lg font-aptos">Loading...</p>
+                  <p className="text-lg">Loading...</p>
                 </div>
               </div>
             ) : fallbackImagePreview ? (
@@ -2140,7 +2051,7 @@ const LiveAvatarSessionComponent: React.FC<{
               disabled={isProcessingCameraQuestion || isAnalyzingImage || isDebugProcessingRef.current}
             >
               {isAnalyzingImage || isDebugProcessingRef.current ? (
-                <span className="font-aptos">🔄 Analyzing...</span>
+                <>🔄 Analyzing...</>
               ) : (
                 <>🔍 Debug: Analyze Image</>
               )}
@@ -2174,7 +2085,7 @@ const LiveAvatarSessionComponent: React.FC<{
           {/* Positioned just above Stop button when four boxes are not visible */}
           {visionMode === "streaming" && isProcessingCameraQuestion && (
               <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-30">
-                <p className="text-custom-green text-2xl font-semibold text-center drop-shadow-lg font-aptos">
+                <p className="text-custom-green text-2xl font-semibold text-center drop-shadow-lg">
                   <span className="inline-flex items-center">
                     Analyzing
                     <span className="inline-block animate-pulse">...</span>

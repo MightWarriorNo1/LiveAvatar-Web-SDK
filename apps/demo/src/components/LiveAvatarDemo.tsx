@@ -8,7 +8,6 @@ export const LiveAvatarDemo = () => {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isExited, setIsExited] = useState(false);
-  // Removed auto-restart functionality - sessions end without restarting
 
   useEffect(() => {
     // Automatically start FULL mode session on mount
@@ -38,11 +37,32 @@ export const LiveAvatarDemo = () => {
   }, []);
 
   const onSessionStopped = () => {
-    // Session ended - just mark as exited and clear token
-    // No auto-restart - user must refresh page to start a new session
+    // Only restart if not exited (user didn't click Stop to exit)
     if (!isExited) {
-      setIsExited(true);
+      // Reset the FE state
       setSessionToken("");
+      // Automatically restart session
+      const startSession = async () => {
+        try {
+          setIsLoading(true);
+          const res = await fetch("/api/start-session", {
+            method: "POST",
+          });
+          if (!res.ok) {
+            const error = await res.json();
+            setError(error.error);
+            setIsLoading(false);
+            return;
+          }
+          const { session_token } = await res.json();
+          setSessionToken(session_token);
+          setIsLoading(false);
+        } catch (error: unknown) {
+          setError((error as Error).message);
+          setIsLoading(false);
+        }
+      };
+      startSession();
     }
   };
 
@@ -186,7 +206,7 @@ export const LiveAvatarDemo = () => {
   if (isLoading) {
     return (
       <div className="w-full h-full flex flex-col items-center justify-center gap-4">
-        <div className="text-white text-xl font-aptos">Loading...</div>
+        <div className="text-white text-xl">Loading...</div>
       </div>
     );
   }
@@ -205,17 +225,9 @@ export const LiveAvatarDemo = () => {
     return (
       <div className="w-full h-full flex flex-col items-center justify-center gap-4">
         <div className="text-white text-2xl font-semibold">Session Ended</div>
-        <div className="text-gray-400 text-lg font-aptos">
+        <div className="text-gray-400 text-lg">
           Thank you for using iSolveUrProblems.ai
         </div>
-        <button
-          onClick={() => {
-            window.location.reload();
-          }}
-          className="bg-custom-green text-black px-6 py-3 rounded-md font-semibold hover:bg-green-400 transition-colors mt-4"
-        >
-          Start New Session
-        </button>
       </div>
     );
   }
