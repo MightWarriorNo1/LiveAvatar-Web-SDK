@@ -85,13 +85,13 @@ const LiveAvatarSessionComponent: React.FC<{
   const fallbackImageInputRef = useRef<HTMLInputElement>(null);
   const isDebugProcessingRef = useRef<boolean>(false);
   const lastAvatarResponseRef = useRef<string>("");
+  const lastVisionResponseTimeRef = useRef<number>(0);
   const hasAutoAnalyzedRef = useRef<boolean>(false);
 
   const [uploadType, setUploadType] = useState<string>("image");
   const isAttachedRef = useRef<boolean>(false);
   const greetingTriggeredRef = useRef<boolean>(false);
   const audioUnlockedRef = useRef<boolean>(false);
-  const initialGreetingInterceptedRef = useRef<boolean>(false);
   const wasMutedBeforeRecordingRef = useRef<boolean>(false);
 
   // Vision mode state: 'streaming' for Go Live, 'snapshot' for Camera button, null for inactive
@@ -113,7 +113,6 @@ const LiveAvatarSessionComponent: React.FC<{
       onSessionStopped();
       // Reset greeting trigger when session disconnects
       greetingTriggeredRef.current = false;
-      initialGreetingInterceptedRef.current = false; // Reset greeting interception
     }
   }, [sessionState, onSessionStopped]);
 
@@ -252,22 +251,22 @@ const LiveAvatarSessionComponent: React.FC<{
     // console.log("isStreamReady: ", isStreamReady);
     // console.log("videoRef.current: ", videoRef.current);
     if (isStreamReady && videoRef.current) {
-      // Ensure video is muted initially to prevent mouth movement during loading
       const video = videoRef.current;
+      // Muted autoplay is allowed without user gesture - avatar displays automatically
       video.muted = true;
       video.volume = 0;
-      
+
       attachElement(videoRef.current);
-      
-      // DO NOT unmute automatically - wait for explicit user interaction
-      // This prevents mouth movement during loading
-      // Unmute only after user explicitly unlocks audio
-      
-      // Try to unlock audio if already unlocked (for cases where stream becomes ready after user interaction)
+
+      // Start playback immediately so avatar displays without user click/touch
+      video.play().catch((err) => {
+        console.warn("Autoplay (muted) failed:", err);
+      });
+
+      // If user already unlocked audio earlier, restore sound
       if (audioUnlockedRef.current) {
         unlockAudio();
       }
-      // console.log("attached element");
     }
   }, [attachElement, isStreamReady, unlockAudio]);
 
@@ -495,27 +494,8 @@ const LiveAvatarSessionComponent: React.FC<{
     }
   }, [startSession, sessionState]);
 
-  // Intercept and interrupt the initial greeting from the backend
-  useEffect(() => {
-    if (sessionState === SessionState.CONNECTED && sessionRef.current) {
-      const handleAvatarSpeakStarted = () => {
-        // Only intercept the first greeting
-        if (!initialGreetingInterceptedRef.current) {
-          initialGreetingInterceptedRef.current = true;
-          // Immediately interrupt the greeting
-          interrupt();
-        }
-      };
-
-      sessionRef.current.on(AgentEventsEnum.AVATAR_SPEAK_STARTED, handleAvatarSpeakStarted);
-
-      return () => {
-        if (sessionRef.current) {
-          sessionRef.current.off(AgentEventsEnum.AVATAR_SPEAK_STARTED, handleAvatarSpeakStarted);
-        }
-      };
-    }
-  }, [sessionState, interrupt, sessionRef]);
+  // Allow the initial greeting (intro line) from the backend to play when session is fully loaded
+  // No interception - when the avatar starts speaking the intro, let it play
 
   // Cleanup camera stream on unmount
   useEffect(() => {
@@ -889,6 +869,7 @@ const LiveAvatarSessionComponent: React.FC<{
           console.log("Sending response to avatar using repeat() - direct speech only");
           // Use repeat() to make avatar speak ONLY this message, no AI processing = no monologue
           await repeat(responseMessage);
+          lastVisionResponseTimeRef.current = Date.now();
           // CRITICAL: Do NOT send any additional messages to prevent continued talking
           // Do NOT use sessionRef.current.message() here as it triggers AI processing and monologuing
         }
@@ -1002,6 +983,18 @@ const LiveAvatarSessionComponent: React.FC<{
         return;
       }
 
+      // Cooldown: do nothing if we just spoke a vision response (avatar still speaking)
+      // Must be before interrupt() so we don't cut off our own analysis on duplicate transcriptions
+      const VISION_RESPONSE_COOLDOWN_MS = 10000;
+      if (lastVisionResponseTimeRef.current > 0 && Date.now() - lastVisionResponseTimeRef.current < VISION_RESPONSE_COOLDOWN_MS) {
+        console.log("Skipping transcription - within vision response cooldown (avatar still speaking)");
+        return;
+      }
+
+      // Interrupt the agent immediately so it never says "I can't access your camera"
+      // We will answer from camera analysis only via processCameraQuestion -> repeat(analysis)
+      interrupt();
+
       // Skip if this transcription matches our recent avatar response (avatar's speech being transcribed)
       // This prevents infinite loops where avatar's response triggers another analysis
       if (lastAvatarResponseRef.current && userText.length > 30) {
@@ -1113,7 +1106,7 @@ const LiveAvatarSessionComponent: React.FC<{
         }
       }
     };
-  }, [sessionRef, visionMode, processCameraQuestion, isVideoActive, isRecording]);
+  }, [sessionRef, visionMode, processCameraQuestion, isVideoActive, isRecording, interrupt]);
 
   // Track if initial analysis has been triggered to prevent repeated automatic analysis
   const hasInitialAnalysisRef = useRef<boolean>(false);
