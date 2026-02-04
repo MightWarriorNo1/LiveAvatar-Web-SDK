@@ -188,11 +188,13 @@ export const LiveAvatarContextProvider = ({
   children,
   sessionAccessToken,
 }: LiveAvatarContextProviderProps) => {
-  // Default voice chat on
-  // Note: apiUrl defaults to https://api.liveavatar.com in the SDK
-  // Only override if you need a different API endpoint
+  // Use same-origin proxy so session start/stop/keep-alive go through our API
+  // and avoid 403/CORS when calling LiveAvatar from the browser.
+  const apiUrl =
+    typeof window !== "undefined" ? `${window.location.origin}/api` : "";
   const config = {
     voiceChat: true,
+    apiUrl,
   };
   const sessionRef = useRef<LiveAvatarSession>(
     new LiveAvatarSession(sessionAccessToken, config),

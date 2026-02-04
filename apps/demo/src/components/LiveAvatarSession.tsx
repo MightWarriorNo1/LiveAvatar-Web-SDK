@@ -108,13 +108,33 @@ const LiveAvatarSessionComponent: React.FC<{
   const recordedChunksRef = useRef<Blob[]>([]);
   const videoPreviewRef = useRef<HTMLVideoElement>(null);
 
+  // When session fails to start (e.g. no credits), show message and don't auto-restart
+  const [sessionStartError, setSessionStartError] = useState<string | null>(null);
+  const sessionStartErrorRef = useRef<string | null>(null);
+
   useEffect(() => {
     if (sessionState === SessionState.DISCONNECTED) {
+      if (sessionStartErrorRef.current) {
+        setSessionStartError(sessionStartErrorRef.current);
+        sessionStartErrorRef.current = null;
+        greetingTriggeredRef.current = false;
+        return;
+      }
       onSessionStopped();
       // Reset greeting trigger when session disconnects
       greetingTriggeredRef.current = false;
     }
   }, [sessionState, onSessionStopped]);
+
+  useEffect(() => {
+    if (sessionState === SessionState.INACTIVE) {
+      setSessionStartError(null);
+      startSession().catch((err: Error) => {
+        const message = err?.message ?? "Session start failed";
+        sessionStartErrorRef.current = message;
+      });
+    }
+  }, [startSession, sessionState]);
 
   // Function to reset to home screen (close camera, clear uploads, but keep session)
   const resetToHomeScreen = useCallback(() => {
@@ -487,12 +507,6 @@ const LiveAvatarSessionComponent: React.FC<{
     fallbackImage,
     loadFallbackImage,
   ]);
-
-  useEffect(() => {
-    if (sessionState === SessionState.INACTIVE) {
-      startSession();
-    }
-  }, [startSession, sessionState]);
 
   // Allow the initial greeting (intro line) from the backend to play when session is fully loaded
   // No interception - when the avatar starts speaking the intro, let it play
@@ -1822,6 +1836,25 @@ const LiveAvatarSessionComponent: React.FC<{
 
   return (
     <div className="fixed inset-0 w-screen h-screen bg-black flex flex-col">
+      {/* Session start error (e.g. no credits) - show message and do not auto-restart */}
+      {sessionStartError && (
+        <div className="absolute inset-x-0 top-0 z-50 bg-red-900/95 text-white px-4 py-4 text-center shadow-lg">
+          <p className="text-lg font-semibold">{sessionStartError}</p>
+          <p className="mt-2 text-sm text-red-200">
+            Add credits to your LiveAvatar account in the dashboard to continue.
+          </p>
+          {onExit && (
+            <button
+              type="button"
+              onClick={() => onExit(false)}
+              className="mt-3 px-4 py-2 bg-white text-red-900 rounded-md font-medium"
+            >
+              Back
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Analyzing popup overlay - only show for snapshot mode, not streaming mode */}
       {(isAnalyzingImage || isAnalyzingVideo) && visionMode !== "streaming" && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-70">
