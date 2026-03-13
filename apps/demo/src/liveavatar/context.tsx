@@ -1,4 +1,11 @@
-import { createContext, useContext, useEffect, useRef, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import {
   ConnectionQuality,
   LiveAvatarSession,
@@ -25,6 +32,10 @@ type LiveAvatarContextProps = {
 
   messages: LiveAvatarSessionMessage[];
   microphoneWarning: string | null;
+  /** Call when user or avatar has activity (e.g. sent message, spoke) so inactivity timeout is reset */
+  reportActivity: () => void;
+  /** Returns true if the last stop was due to inactivity timeout (then clears the flag). Used so UI can avoid auto-restart. */
+  wasStoppedDueToInactivity: () => boolean;
 };
 
 export const LiveAvatarContext = createContext<LiveAvatarContextProps>({
@@ -40,6 +51,8 @@ export const LiveAvatarContext = createContext<LiveAvatarContextProps>({
   isAvatarTalking: false,
   messages: [],
   microphoneWarning: null,
+  reportActivity: () => {},
+  wasStoppedDueToInactivity: () => false,
 });
 
 type LiveAvatarContextProviderProps = {
@@ -208,6 +221,51 @@ export const LiveAvatarContextProvider = ({
   const { isUserTalking, isAvatarTalking } = useTalkingState(sessionRef);
   // const { messages } = useChatHistoryState(sessionRef);
 
+  const lastActivityAtRef = useRef(0);
+  const stoppedDueToInactivityRef = useRef(false);
+  const reportActivity = useCallback(() => {
+    lastActivityAtRef.current = Date.now();
+  }, []);
+  const wasStoppedDueToInactivity = useCallback(() => {
+    const v = stoppedDueToInactivityRef.current;
+    stoppedDueToInactivityRef.current = false;
+    return v;
+  }, []);
+
+  // Update last activity on any user or avatar speech
+  useEffect(() => {
+    const session = sessionRef.current;
+    if (!session) return;
+    const onActivity = () => {
+      lastActivityAtRef.current = Date.now();
+    };
+    session.on(AgentEventsEnum.USER_SPEAK_STARTED, onActivity);
+    session.on(AgentEventsEnum.USER_SPEAK_ENDED, onActivity);
+    session.on(AgentEventsEnum.AVATAR_SPEAK_STARTED, onActivity);
+    session.on(AgentEventsEnum.AVATAR_SPEAK_ENDED, onActivity);
+    return () => {
+      session.off(AgentEventsEnum.USER_SPEAK_STARTED, onActivity);
+      session.off(AgentEventsEnum.USER_SPEAK_ENDED, onActivity);
+      session.off(AgentEventsEnum.AVATAR_SPEAK_STARTED, onActivity);
+      session.off(AgentEventsEnum.AVATAR_SPEAK_ENDED, onActivity);
+    };
+  }, [sessionRef]);
+
+  // Terminate session after 1 minute of no activity
+  const INACTIVITY_TIMEOUT_MS = 60 * 1000;
+  const INACTIVITY_CHECK_MS = 15 * 1000;
+  useEffect(() => {
+    if (sessionState !== SessionState.CONNECTED) return;
+    lastActivityAtRef.current = Date.now();
+    const intervalId = setInterval(() => {
+      if (Date.now() - lastActivityAtRef.current >= INACTIVITY_TIMEOUT_MS) {
+        stoppedDueToInactivityRef.current = true;
+        sessionRef.current?.stop?.();
+      }
+    }, INACTIVITY_CHECK_MS);
+    return () => clearInterval(intervalId);
+  }, [sessionState]);
+
   return (
     <LiveAvatarContext.Provider
       value={{
@@ -221,6 +279,8 @@ export const LiveAvatarContextProvider = ({
         isAvatarTalking,
         messages: [], // TODO - properly implement chat history
         microphoneWarning,
+        reportActivity,
+        wasStoppedDueToInactivity,
       }}
     >
       {children}

@@ -13,6 +13,7 @@ export async function POST() {
       body: JSON.stringify({
         mode: "CUSTOM",
         avatar_id: AVATAR_ID,
+        max_session_duration: 20 * 60, // 20 minutes (LiveAvatar API: seconds)
       }),
     });
     if (!res.ok) {

@@ -2,10 +2,11 @@ import { useCallback } from "react";
 import { useLiveAvatarContext } from "./context";
 
 export const useTextChat = (mode: "FULL" | "CUSTOM") => {
-  const { sessionRef } = useLiveAvatarContext();
+  const { sessionRef, reportActivity } = useLiveAvatarContext();
 
   const sendMessage = useCallback(
     async (message: string, imageAnalysis?: string | null) => {
+      reportActivity();
       if (mode === "FULL") {
         return sessionRef.current.message(message);
       } else if (mode === "CUSTOM") {
@@ -26,7 +27,7 @@ export const useTextChat = (mode: "FULL" | "CUSTOM") => {
         return sessionRef.current.repeatAudio(audio);
       }
     },
-    [sessionRef, mode],
+    [sessionRef, mode, reportActivity],
   );
 
   return {

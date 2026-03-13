@@ -36,7 +36,13 @@ export const LiveAvatarDemo = () => {
     startSession();
   }, []);
 
-  const onSessionStopped = () => {
+  const onSessionStopped = (opts?: { reason?: "inactivity" }) => {
+    // When stopped due to inactivity, show "Session Ended" and do not restart (same as Stop button)
+    if (opts?.reason === "inactivity") {
+      setIsExited(true);
+      setSessionToken("");
+      return;
+    }
     // Only restart if not exited (user didn't click Stop to exit)
     if (!isExited) {
       // Reset the FE state
@@ -99,9 +105,10 @@ export const LiveAvatarDemo = () => {
       // Aggressively try to exit/close the tab on mobile
       if (typeof window !== "undefined") {
         // Detect if we're on mobile
-        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
-          navigator.userAgent
-        );
+        const isMobile =
+          /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+            navigator.userAgent,
+          );
 
         // For mobile: Try multiple aggressive exit strategies
         if (isMobile) {
@@ -149,7 +156,11 @@ export const LiveAvatarDemo = () => {
 
           // Strategy 4: Navigate to referrer if available
           const referrer = document.referrer;
-          if (referrer && referrer !== window.location.href && referrer !== "") {
+          if (
+            referrer &&
+            referrer !== window.location.href &&
+            referrer !== ""
+          ) {
             try {
               window.location.replace(referrer);
               return;
@@ -179,7 +190,11 @@ export const LiveAvatarDemo = () => {
           }
 
           const referrer = document.referrer;
-          if (referrer && referrer !== window.location.href && referrer !== "") {
+          if (
+            referrer &&
+            referrer !== window.location.href &&
+            referrer !== ""
+          ) {
             try {
               window.location.href = referrer;
               return;
@@ -206,7 +221,7 @@ export const LiveAvatarDemo = () => {
   if (isLoading) {
     return (
       <div className="w-full h-full flex flex-col items-center justify-center gap-4">
-        <div className="text-white text-xl">Loading...</div>
+        <div className="text-inset text-xl">Loading...</div>
       </div>
     );
   }
@@ -224,8 +239,8 @@ export const LiveAvatarDemo = () => {
   if (isExited) {
     return (
       <div className="w-full h-full flex flex-col items-center justify-center gap-4">
-        <div className="text-white text-2xl font-semibold">Session Ended</div>
-        <div className="text-gray-400 text-lg">
+        <div className="text-inset text-2xl font-semibold">Session Ended</div>
+        <div className="text-inset text-lg opacity-90">
           Thank you for using iSolveUrProblems.ai
         </div>
       </div>

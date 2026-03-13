@@ -41,18 +41,19 @@ export class SessionAPIClient {
 
       if (!response.ok) {
         const data = await response.json();
-        throw new SessionApiError(
-          data.data?.message ||
-            `API request failed with status ${response.status}`,
-          data.code,
-          response.status,
-        );
+        const message =
+          data.data?.message ??
+          data.message ??
+          `API request failed with status ${response.status}`;
+        throw new SessionApiError(message, data.code, response.status);
       }
 
       const data = await response.json();
 
       if (data.code !== SUCCESS_CODE) {
-        throw new SessionApiError(data.data?.message || "API request failed");
+        const message =
+          data.data?.message ?? data.message ?? "API request failed";
+        throw new SessionApiError(message);
       }
 
       return data.data as T;

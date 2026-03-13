@@ -79,7 +79,8 @@ export class VoiceChat extends (EventEmitter as new () => TypedEmitter<VoiceChat
       this.state = VoiceChatState.ACTIVE;
     } catch (error) {
       // If microphone is not available, emit warning but don't fail
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
       const warningMessage = `Microphone not available: ${errorMessage}. Session will continue without voice chat.`;
       console.warn(warningMessage);
       this.emit(VoiceChatEvent.WARNING, warningMessage);

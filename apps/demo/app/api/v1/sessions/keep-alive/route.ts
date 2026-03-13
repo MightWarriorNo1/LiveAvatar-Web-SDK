@@ -4,7 +4,10 @@ export async function POST(request: Request) {
   const auth = request.headers.get("Authorization");
   if (!auth) {
     return new Response(
-      JSON.stringify({ code: 403, data: { message: "Authorization required" } }),
+      JSON.stringify({
+        code: 403,
+        data: { message: "Authorization required" },
+      }),
       { status: 403, headers: { "Content-Type": "application/json" } },
     );
   }
