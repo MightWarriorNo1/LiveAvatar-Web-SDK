@@ -1908,9 +1908,6 @@ const LiveAvatarSessionComponent: React.FC<{
 
       {/* Text overlays at the top */}
       <div className="absolute top-0 left-0 right-0 z-10 flex flex-col items-center pt-4 pb-2">
-        <h1 className="text-inset text-2xl font-semibold">
-          iSolveUrProblems.ai - beta
-        </h1>
         {microphoneWarning && (
           <div className="mt-4 bg-yellow-500 text-black px-4 py-2 rounded-md max-w-2xl text-center">
             <p className="font-semibold">⚠️ Warning: {microphoneWarning}</p>
