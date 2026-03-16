@@ -10,7 +10,7 @@ import {
 } from "../liveavatar";
 import { SessionState, AgentEventsEnum } from "@heygen/liveavatar-web-sdk";
 import { useAvatarActions } from "../liveavatar/useAvatarActions";
-import { Radio, Camera, Image as ImageIcon, Video } from "lucide-react";
+import { Radio, Camera, Paperclip, Video } from "lucide-react";
 
 // Then in your buttons:
 const Button: React.FC<{
@@ -2135,7 +2135,7 @@ const LiveAvatarSessionComponent: React.FC<{
                       : ""
                   }`}
                 >
-                  {isAvatarTalking ? "Talk to Interrupt" : "Ask Anything"}
+                  {isAvatarTalking ? "Talk to Interrupt" : ""}
                 </p>
               </div>
             )}
@@ -2174,7 +2174,7 @@ const LiveAvatarSessionComponent: React.FC<{
                     handleFileUploadClick("image");
                   }}
                 >
-                  <ImageIcon className="mr-2 w-5 h-5" /> Gallery
+                  <Paperclip className="mr-2 w-5 h-5" /> Files
                 </button>
                 <button
                   className="btn-inset p-3 rounded-lg flex items-center justify-center text-lg font-medium whitespace-nowrap"
