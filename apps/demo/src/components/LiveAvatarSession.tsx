@@ -2153,11 +2153,11 @@ const LiveAvatarSessionComponent: React.FC<{
             </div>
           )}
 
-          {/* ss added */}
-          {/* Hide buttons when in Video mode, streaming (Go Live) mode, or Camera mode */}
+          {/* ss added - Go Live, Files, Camera, Video moved down; Camera and Video in same row as Stop */}
           {!isVideoActive && visionMode !== "streaming" && !isCameraActive && (
-            <div className="fixed bottom-[4rem] left-1/2 -translate-x-1/2 w-[95%] max-w-7xl p-4">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="fixed bottom-4 left-1/2 -translate-x-1/2 w-[95%] max-w-7xl z-20 px-4">
+              {/* Row 1: Go Live, Files */}
+              <div className="grid grid-cols-2 gap-4 mb-4">
                 <button
                   className="btn-inset p-3 rounded-lg flex items-center justify-center text-lg font-medium whitespace-nowrap"
                   onClick={async () => {
@@ -2176,6 +2176,9 @@ const LiveAvatarSessionComponent: React.FC<{
                 >
                   <Paperclip className="mr-2 w-5 h-5" /> Files
                 </button>
+              </div>
+              {/* Row 2: Camera, Video, Stop (same row as Stop button) */}
+              <div className="grid grid-cols-2 gap-4">
                 <button
                   className="btn-inset p-3 rounded-lg flex items-center justify-center text-lg font-medium whitespace-nowrap"
                   onClick={async () => {
@@ -2195,33 +2198,40 @@ const LiveAvatarSessionComponent: React.FC<{
                   <Video className="mr-2 w-5 h-5" />
                   Video
                 </button>
+                {/* Stop button - position and behavior unchanged */}
+                {/* <button
+                  className="btn-inset p-3 rounded-lg flex items-center justify-center text-xl font-medium whitespace-nowrap"
+                  onClick={async () => {
+                    // Unlock audio on button click (user interaction)
+                    await unlockAudio();
+                    handleStopSession();
+                  }}
+                >
+                  Stop
+                </button> */}
               </div>
             </div>
           )}
         </>
       )}
 
-      {/* <button
-        className="fixed bottom-4 w-[11rem] ml-[7rem] bg-white text-black px-4 py-2 rounded-md z-20"
-        onClick={() => stopSession()}
-      >
-        Stop
-      </button> */}
-
-      {/* <div className="fixed bottom-4 left-1/2 -translate-x-1/2 w-[95%] max-w-7xl z-20 px-4">
-        <div className="flex justify-center">
-          <button
-            className="btn-inset p-3 rounded-lg flex items-center justify-center text-xl font-medium whitespace-nowrap w-1/4 md:w-[12.5%]"
-            onClick={async () => {
-              // Unlock audio on button click (user interaction)
-              await unlockAudio();
-              handleStopSession();
-            }}
-          >
-            Stop
-          </button>
+      {/* Stop button shown when four buttons are hidden (Camera / Video / Go Live mode) - same position as bottom row above */}
+      {((isVideoActive || visionMode === "streaming" || isCameraActive)) && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 w-[95%] max-w-7xl z-20 px-4">
+          <div className="flex justify-center">
+            <button
+              className="btn-inset p-3 rounded-lg flex items-center justify-center text-xl font-medium whitespace-nowrap w-1/4 md:w-[12.5%]"
+              onClick={async () => {
+                // Unlock audio on button click (user interaction)
+                await unlockAudio();
+                handleStopSession();
+              }}
+            >
+              Stop
+            </button>
+          </div>
         </div>
-      </div> */}
+      )}
     </div>
   );
 };
