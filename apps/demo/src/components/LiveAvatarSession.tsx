@@ -2208,7 +2208,7 @@ const LiveAvatarSessionComponent: React.FC<{
         Stop
       </button> */}
 
-      <div className="fixed bottom-4 left-1/2 -translate-x-1/2 w-[95%] max-w-7xl z-20 px-4">
+      {/* <div className="fixed bottom-4 left-1/2 -translate-x-1/2 w-[95%] max-w-7xl z-20 px-4">
         <div className="flex justify-center">
           <button
             className="btn-inset p-3 rounded-lg flex items-center justify-center text-xl font-medium whitespace-nowrap w-1/4 md:w-[12.5%]"
@@ -2221,7 +2221,7 @@ const LiveAvatarSessionComponent: React.FC<{
             Stop
           </button>
         </div>
-      </div>
+      </div> */}
     </div>
   );
 };
