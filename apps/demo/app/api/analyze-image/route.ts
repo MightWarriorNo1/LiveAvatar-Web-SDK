@@ -24,11 +24,12 @@ export async function POST(request: Request) {
     }
 
     // Accept both File and Blob (some runtimes return Blob from formData)
-    const file =
+    const value = fileOrBlob as unknown;
+    const file: File | null =
       fileOrBlob instanceof File
         ? fileOrBlob
-        : fileOrBlob instanceof Blob
-          ? new File([fileOrBlob], "image.jpg", { type: fileOrBlob.type || "image/jpeg" })
+        : value instanceof Blob
+          ? new File([value], "image.jpg", { type: value.type || "image/jpeg" })
           : null;
     if (!file) {
       return new Response(
