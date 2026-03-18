@@ -2174,7 +2174,7 @@ const LiveAvatarSessionComponent: React.FC<{
           {!isVideoActive && visionMode !== "streaming" && !isCameraActive && (
             <div className="fixed bottom-48 left-1/2 -translate-x-1/2 w-[95%] max-w-7xl z-20 px-4">
               <div className="flex justify-center mb-4">
-                {/* <button
+                <button
                   className="btn-inset p-3 rounded-lg flex items-center justify-center text-xl font-medium whitespace-nowrap"
                   onClick={async () => {
                     // Unlock audio on button click (user interaction)
@@ -2183,7 +2183,7 @@ const LiveAvatarSessionComponent: React.FC<{
                   }}
                 >
                   Finish Talking
-                </button> */}
+                </button>
               </div>
               {/* Row 1: Go Live, Files */}
               {/* <div className="grid grid-cols-2 gap-4 mb-4">
