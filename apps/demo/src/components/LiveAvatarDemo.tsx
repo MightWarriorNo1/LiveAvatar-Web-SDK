@@ -1,75 +1,45 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import Image from "next/image";
 import { LiveAvatarSession } from "./LiveAvatarSession";
 
 export const LiveAvatarDemo = () => {
   const [sessionToken, setSessionToken] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [isExited, setIsExited] = useState(false);
 
-  useEffect(() => {
-    // Automatically start FULL mode session on mount
-    const startSession = async () => {
-      try {
-        setIsLoading(true);
-        const res = await fetch("/api/start-session", {
-          method: "POST",
-        });
-        console.log("RESPONSE", res);
-        if (!res.ok) {
-          const error = await res.json();
-          setError(error.error);
-          setIsLoading(false);
-          return;
-        }
-        const { session_token } = await res.json();
-        setSessionToken(session_token);
+  const startSession = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      const res = await fetch("/api/start-session", {
+        method: "POST",
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        setError(err.error ?? "Failed to start session");
         setIsLoading(false);
-      } catch (error: unknown) {
-        setError((error as Error).message);
-        setIsLoading(false);
+        return;
       }
-    };
-
-    startSession();
-  }, []);
+      const { session_token } = await res.json();
+      setSessionToken(session_token);
+      setIsLoading(false);
+    } catch (err: unknown) {
+      setError((err as Error).message);
+      setIsLoading(false);
+    }
+  };
 
   const onSessionStopped = (opts?: { reason?: "inactivity" }) => {
-    // When stopped due to inactivity, show "Session Ended" and do not restart (same as Stop button)
     if (opts?.reason === "inactivity") {
       setIsExited(true);
       setSessionToken("");
       return;
     }
-    // Only restart if not exited (user didn't click Stop to exit)
-    if (!isExited) {
-      // Reset the FE state
-      setSessionToken("");
-      // Automatically restart session
-      const startSession = async () => {
-        try {
-          setIsLoading(true);
-          const res = await fetch("/api/start-session", {
-            method: "POST",
-          });
-          if (!res.ok) {
-            const error = await res.json();
-            setError(error.error);
-            setIsLoading(false);
-            return;
-          }
-          const { session_token } = await res.json();
-          setSessionToken(session_token);
-          setIsLoading(false);
-        } catch (error: unknown) {
-          setError((error as Error).message);
-          setIsLoading(false);
-        }
-      };
-      startSession();
-    }
+    // Return to start screen when user finishes talking (no auto-restart)
+    setSessionToken("");
   };
 
   // Helper function to try closing the tab with multiple methods
@@ -226,22 +196,46 @@ export const LiveAvatarDemo = () => {
     );
   }
 
-  if (error) {
-    return (
-      <div className="w-full h-full flex flex-col items-center justify-center gap-4">
-        <div className="text-red-500">
-          {"Error getting session token: " + error}
-        </div>
-      </div>
-    );
-  }
-
   if (isExited) {
     return (
       <div className="w-full h-full flex flex-col items-center justify-center gap-4">
         <div className="text-inset text-2xl font-semibold">Session Ended</div>
         <div className="text-inset text-lg opacity-90">
           Thank you for using iSolveUrProblems.ai
+        </div>
+      </div>
+    );
+  }
+
+  // Start screen: show startscreen image with "Talk to iScott" button overlay
+  if (!sessionToken) {
+    return (
+      <div className="relative w-full h-full min-h-screen flex flex-col items-center justify-end overflow-hidden bg-black">
+        <Image
+          src="/startscreen.png"
+          alt="Start screen"
+          fill
+          className="object-cover object-center"
+          priority
+          sizes="100vw"
+        />
+        {/* Same position as "Finish Talking" in LiveAvatarSession */}
+        <div className="fixed bottom-48 left-1/2 -translate-x-1/2 w-[95%] max-w-7xl z-20 px-4">
+          {error && (
+            <p className="text-red-500 text-center text-sm max-w-md drop-shadow-md mb-2">
+              {error}
+            </p>
+          )}
+          <div className="flex justify-center mb-4">
+            <button
+              type="button"
+              onClick={startSession}
+              disabled={isLoading}
+              className="btn-inset p-3 rounded-lg flex items-center justify-center text-xl font-medium whitespace-nowrap"
+            >
+              {isLoading ? "Starting…" : "Talk to iScott"}
+            </button>
+          </div>
         </div>
       </div>
     );
