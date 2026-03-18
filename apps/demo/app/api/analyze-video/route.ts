@@ -55,7 +55,7 @@ export async function POST(request: Request) {
         Authorization: `Bearer ${GROKAI_API_KEY}`,
       },
       body: JSON.stringify({
-        model: "grok-2-vision-1212",
+        model: "grok-4-fast-reasoning",
         messages: [
           {
             role: "user",

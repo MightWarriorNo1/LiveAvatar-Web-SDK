@@ -3,16 +3,54 @@ import { GROKAI_API_KEY } from "../secrets";
 export async function POST(request: Request) {
   try {
     const formData = await request.formData();
-    const file = formData.get("image") as File;
+    const keys = [...formData.keys()];
+    const fileOrBlob = formData.get("image");
     const question = formData.get("question") as string | null;
 
-    if (!file) {
-      return new Response(JSON.stringify({ error: "Image file is required" }), {
-        status: 400,
-        headers: {
-          "Content-Type": "application/json",
+    if (!fileOrBlob) {
+      console.error("analyze-image: missing image. Keys received:", keys);
+      return new Response(
+        JSON.stringify({
+          error: "Image file is required",
+          details: keys.length ? `Form keys: ${keys.join(", ")}` : "No form keys received",
+        }),
+        {
+          status: 400,
+          headers: {
+            "Content-Type": "application/json",
+          },
         },
-      });
+      );
+    }
+
+    // Accept both File and Blob (some runtimes return Blob from formData)
+    const file =
+      fileOrBlob instanceof File
+        ? fileOrBlob
+        : fileOrBlob instanceof Blob
+          ? new File([fileOrBlob], "image.jpg", { type: fileOrBlob.type || "image/jpeg" })
+          : null;
+    if (!file) {
+      return new Response(
+        JSON.stringify({
+          error: "Image file is required",
+          details: `Unexpected type: ${typeof fileOrBlob}`,
+        }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    }
+
+    if (file.size === 0) {
+      return new Response(
+        JSON.stringify({ error: "Image file is empty" }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
     }
 
     if (!GROKAI_API_KEY) {
@@ -51,7 +89,7 @@ export async function POST(request: Request) {
         Authorization: `Bearer ${GROKAI_API_KEY}`,
       },
       body: JSON.stringify({
-        model: "grok-2-vision-1212",
+        model: "grok-4-fast-reasoning",
         messages: [
           {
             role: "user",

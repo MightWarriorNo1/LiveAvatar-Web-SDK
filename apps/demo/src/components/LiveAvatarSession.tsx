@@ -699,7 +699,7 @@ const LiveAvatarSessionComponent: React.FC<{
 
       // Analyze the photo
       const formData = new FormData();
-      formData.append("image", frameFile);
+      formData.append("image", frameFile, frameFile.name || "camera-frame.jpg");
       formData.append("question", "Describe what you see briefly");
 
       const response = await fetch("/api/analyze-image", {
@@ -708,8 +708,15 @@ const LiveAvatarSessionComponent: React.FC<{
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Failed to analyze photo");
+        let errorMessage = "Failed to analyze photo";
+        try {
+          const error = await response.json();
+          errorMessage = error.error || errorMessage;
+          if (error.details) errorMessage += ` (${error.details})`;
+        } catch {
+          errorMessage += ` (${response.status})`;
+        }
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();
@@ -847,7 +854,7 @@ const LiveAvatarSessionComponent: React.FC<{
         console.log("Frame captured, sending to API with question:", userText);
         // Send to analyze-image API with the user's question
         const formData = new FormData();
-        formData.append("image", frameFile);
+        formData.append("image", frameFile, frameFile.name || "camera-frame.jpg");
         formData.append("question", userText);
 
         const response = await fetch("/api/analyze-image", {
@@ -856,9 +863,16 @@ const LiveAvatarSessionComponent: React.FC<{
         });
 
         if (!response.ok) {
-          const error = await response.json();
-          console.error("API error:", error);
-          throw new Error(error.error || "Failed to analyze camera frame");
+          let errorMessage = "Failed to analyze camera frame";
+          try {
+            const error = await response.json();
+            errorMessage = error.error || errorMessage;
+            if (error.details) errorMessage += ` (${error.details})`;
+          } catch {
+            errorMessage += ` (${response.status})`;
+          }
+          console.error("API error:", errorMessage);
+          throw new Error(errorMessage);
         }
 
         const data = await response.json();
@@ -1746,7 +1760,7 @@ const LiveAvatarSessionComponent: React.FC<{
       setIsAnalyzingImage(true);
       try {
         const formData = new FormData();
-        formData.append("image", file);
+        formData.append("image", file, file.name || "image.jpg");
 
         const response = await fetch("/api/analyze-image", {
           method: "POST",
@@ -1754,8 +1768,15 @@ const LiveAvatarSessionComponent: React.FC<{
         });
 
         if (!response.ok) {
-          const error = await response.json();
-          throw new Error(error.error || "Failed to analyze image");
+          let errorMessage = "Failed to analyze image";
+          try {
+            const error = await response.json();
+            errorMessage = error.error || errorMessage;
+            if (error.details) errorMessage += ` (${error.details})`;
+          } catch {
+            errorMessage += ` (${response.status})`;
+          }
+          throw new Error(errorMessage);
         }
 
         const data = await response.json();
@@ -2216,7 +2237,7 @@ const LiveAvatarSessionComponent: React.FC<{
       )}
 
       {/* Stop button shown when four buttons are hidden (Camera / Video / Go Live mode) - same position as bottom row above */}
-      {((isVideoActive || visionMode === "streaming" || isCameraActive)) && (
+      {/* {((isVideoActive || visionMode === "streaming" || isCameraActive)) && (
         <div className="fixed bottom-4 left-1/2 -translate-x-1/2 w-[95%] max-w-7xl z-20 px-4">
           <div className="flex justify-center">
             <button
@@ -2231,7 +2252,7 @@ const LiveAvatarSessionComponent: React.FC<{
             </button>
           </div>
         </div>
-      )}
+      )} */}
     </div>
   );
 };
