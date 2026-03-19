@@ -220,7 +220,7 @@ export const LiveAvatarDemo = () => {
           sizes="100vw"
         />
         {/* Same position as "Finish Talking" in LiveAvatarSession */}
-        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 w-[95%] max-w-7xl z-20 px-4">
+        <div className="fixed bottom-32 left-1/2 -translate-x-1/2 w-[95%] max-w-7xl z-20 px-4">
           {error && (
             <p className="text-red-500 text-center text-sm max-w-md drop-shadow-md mb-2">
               {error}
@@ -231,7 +231,7 @@ export const LiveAvatarDemo = () => {
               type="button"
               onClick={startSession}
               disabled={isLoading}
-              className="btn-inset p-3 rounded-lg flex items-center justify-center text-xl font-medium whitespace-nowrap"
+              className="btn-inset p-4 rounded-lg flex items-center justify-center text-xl font-medium whitespace-nowrap"
             >
               {isLoading ? "Starting…" : "Talk to iScott"}
             </button>
