@@ -220,7 +220,7 @@ export const LiveAvatarDemo = () => {
           sizes="100vw"
         />
         {/* Same position as "Finish Talking" in LiveAvatarSession */}
-        <div className="fixed bottom-32 left-1/2 -translate-x-1/2 w-[95%] max-w-7xl z-20 px-4">
+        <div className="fixed bottom-28 left-1/2 -translate-x-1/2 w-[95%] max-w-7xl z-20 px-4">
           {error && (
             <p className="text-red-500 text-center text-sm max-w-md drop-shadow-md mb-2">
               {error}
