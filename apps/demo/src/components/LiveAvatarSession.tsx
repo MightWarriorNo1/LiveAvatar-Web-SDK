@@ -2172,7 +2172,7 @@ const LiveAvatarSessionComponent: React.FC<{
 
           {/* ss added - Go Live, Files, Camera, Video moved down; Camera and Video in same row as Stop */}
           {!isVideoActive && visionMode !== "streaming" && !isCameraActive && (
-            <div className="fixed bottom-48 left-1/2 -translate-x-1/2 w-[95%] max-w-7xl z-20 px-4">
+            <div className="fixed bottom-24 left-1/2 -translate-x-1/2 w-[95%] max-w-7xl z-20 px-4">
               <div className="flex justify-center mb-4">
                 <button
                   className="btn-inset p-3 rounded-lg flex items-center justify-center text-xl font-medium whitespace-nowrap"
@@ -2182,7 +2182,7 @@ const LiveAvatarSessionComponent: React.FC<{
                     handleStopSession();
                   }}
                 >
-                  Finish Talking
+                  Finish
                 </button>
               </div>
               {/* Row 1: Go Live, Files */}
