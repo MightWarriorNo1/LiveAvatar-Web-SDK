@@ -219,19 +219,19 @@ export const LiveAvatarDemo = () => {
           priority
           sizes="100vw"
         />
-        {/* Same position as "Finish Talking" in LiveAvatarSession */}
+        {/* Primary CTA: keep it near the bottom like the in-session "Stop" control */}
         <div className="fixed bottom-28 left-1/2 -translate-x-1/2 w-[95%] max-w-7xl z-20 px-4">
           {error && (
             <p className="text-red-500 text-center text-sm max-w-md drop-shadow-md mb-2">
               {error}
             </p>
           )}
-          <div className="flex justify-center mb-4">
+          <div className="flex justify-center">
             <button
               type="button"
               onClick={startSession}
               disabled={isLoading}
-              className="btn-inset p-4 rounded-lg flex items-center justify-center text-xl font-medium whitespace-nowrap"
+              className="btn-wood rounded-md px-8 md:px-10 py-3 md:py-4 flex items-center justify-center text-2xl md:text-5xl font-semibold tracking-tight whitespace-nowrap"
             >
               {isLoading ? "Starting…" : "Talk to iScott"}
             </button>

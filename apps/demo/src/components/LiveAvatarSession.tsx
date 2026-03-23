@@ -2175,7 +2175,7 @@ const LiveAvatarSessionComponent: React.FC<{
             <div className="fixed bottom-28 left-1/2 -translate-x-1/2 w-[95%] max-w-7xl z-20 px-4">
               <div className="flex justify-center mb-4">
                 <button
-                  className="btn-inset p-3 rounded-lg flex items-center justify-center text-xl font-medium whitespace-nowrap"
+                  className="btn-wood rounded-md px-4 md:px-5 py-2 md:py-2.5 flex items-center justify-center text-lg md:text-2xl font-semibold whitespace-nowrap"
                   onClick={async () => {
                     // Unlock audio on button click (user interaction)
                     await unlockAudio();
